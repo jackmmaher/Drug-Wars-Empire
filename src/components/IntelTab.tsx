@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled, LEVEL_CONFIGS } from '../constants/game';
+import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled, isRegionAvailable, LEVEL_CONFIGS, REGIONS, getRegionForLocation } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
 
@@ -354,90 +354,107 @@ export function IntelTab() {
         )}
       </Section>
 
-      {/* Gangs -- expanded cards with context */}
-      <Section title="GANGS" count={GANGS.length} defaultOpen={false}>
-        {GANGS.map(g => {
-          const rel = cp.gangRelations[g.id] ?? 0;
-          const tier = getGangFavorTier(rel);
-          const { label, color: favorColor } = getFavorLabel(rel);
-          const perks = getFavorPerks(tier);
-          const barPercent = Math.max(0, Math.min(100, ((rel + 30) / 55) * 100));
-          const nextMilestone = getNextFavorMilestone(rel);
-          const onTheirTurf = g.turf.includes(cp.location);
-          const isAtWar = campaign.gangWar.activeWar?.targetGangId === g.id;
-          const isDefeated = campaign.gangWar.defeatedGangs.includes(g.id);
-          const statusLine = getGangStatusLine(
-            rel, g.id, cp.location, g.turf,
-            !!cp.consignment, cp.consignment?.gangId,
-            isAtWar,
-          );
-
+      {/* Gangs -- grouped by region, filtered by campaign level */}
+      <Section title="GANGS" count={GANGS.filter(g => {
+        const region = getRegionForLocation(g.turf[0]);
+        return region ? isRegionAvailable(cp.campaignLevel, region.id, gameMode) : true;
+      }).length} defaultOpen={false}>
+        {REGIONS.filter(r => isRegionAvailable(cp.campaignLevel, r.id, gameMode)).map(region => {
+          const regionGangs = GANGS.filter(g => {
+            const gRegion = getRegionForLocation(g.turf[0]);
+            return gRegion?.id === region.id;
+          });
+          if (regionGangs.length === 0) return null;
           return (
-            <View key={g.id} style={{
-              backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
-              borderRadius: 8, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: g.color,
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: g.color }}>{g.name}</Text>
-                  <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                    Turf: {g.turf.map(t => LOCATIONS.find(l => l.id === t)?.name || t).join(', ')}
-                  </Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: rel > 0 ? colors.green : rel < 0 ? colors.red : colors.textMuted }}>
-                    {rel > 0 ? '+' : ''}{rel}
-                  </Text>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: favorColor }}>{label}</Text>
-                </View>
-              </View>
-              <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
-                <View style={{ height: '100%', width: `${barPercent}%`, backgroundColor: favorColor, borderRadius: 2 }} />
-              </View>
-
-              {/* Status line */}
-              <Text style={{ fontSize: 12, color: isAtWar ? colors.red : onTheirTurf ? colors.blueLight : colors.textDim, marginBottom: 3, fontStyle: 'italic' }}>
-                {isDefeated ? 'Defeated. Their turf is yours.' : statusLine}
+            <View key={region.id} style={{ marginBottom: 8 }}>
+              <Text style={{ fontSize: 12, color: region.color, letterSpacing: 1, fontWeight: '700', marginBottom: 4 }}>
+                {region.emoji} {region.name.toUpperCase()}
               </Text>
+              {regionGangs.map(g => {
+                const rel = cp.gangRelations[g.id] ?? 0;
+                const tier = getGangFavorTier(rel);
+                const { label, color: favorColor } = getFavorLabel(rel);
+                const perks = getFavorPerks(tier);
+                const barPercent = Math.max(0, Math.min(100, ((rel + 30) / 55) * 100));
+                const nextMilestone = getNextFavorMilestone(rel);
+                const onTheirTurf = g.turf.includes(cp.location);
+                const isAtWar = campaign.gangWar.activeWar?.targetGangId === g.id;
+                const isDefeated = campaign.gangWar.defeatedGangs.includes(g.id);
+                const statusLine = getGangStatusLine(
+                  rel, g.id, cp.location, g.turf,
+                  !!cp.consignment, cp.consignment?.gangId,
+                  isAtWar,
+                );
 
-              {/* Next milestone */}
-              {nextMilestone && !isDefeated && (
-                <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>
-                  +{nextMilestone.needed} rep to {nextMilestone.tierName}: {nextMilestone.perk}
-                </Text>
-              )}
-              {!nextMilestone && !isDefeated && (
-                <Text style={{ fontSize: 11, color: colors.green, marginBottom: 3 }}>Maximum loyalty reached</Text>
-              )}
-
-              {/* On their turf indicator */}
-              {onTheirTurf && !isDefeated && (
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3,
-                  backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3, alignSelf: 'flex-start',
-                }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.blueLight }}>You're here</Text>
-                  {consignmentEnabled && rel >= FAVOR_FRIENDLY && !cp.consignment && (
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}> -- consignment available</Text>
-                  )}
-                  {territoryEnabled && !cp.territories[cp.location] && (
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}> -- territory for sale</Text>
-                  )}
-                </View>
-              )}
-
-              {perks.length > 0 && (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                  {perks.map((perk, i) => (
-                    <View key={i} style={{
-                      backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2,
-                    }}>
-                      <Text style={{ fontSize: 11, color: colors.textMuted }}>{perk}</Text>
+                return (
+                  <View key={g.id} style={{
+                    backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+                    borderRadius: 8, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: g.color,
+                  }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: g.color }}>{g.name}</Text>
+                        <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                          Turf: {g.turf.map(t => LOCATIONS.find(l => l.id === t)?.name || t).join(', ')}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: rel > 0 ? colors.green : rel < 0 ? colors.red : colors.textMuted }}>
+                          {rel > 0 ? '+' : ''}{rel}
+                        </Text>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: favorColor }}>{label}</Text>
+                      </View>
                     </View>
-                  ))}
-                </View>
-              )}
+                    <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+                      <View style={{ height: '100%', width: `${barPercent}%`, backgroundColor: favorColor, borderRadius: 2 }} />
+                    </View>
+
+                    {/* Status line */}
+                    <Text style={{ fontSize: 12, color: isAtWar ? colors.red : onTheirTurf ? colors.blueLight : colors.textDim, marginBottom: 3, fontStyle: 'italic' }}>
+                      {isDefeated ? 'Defeated. Their turf is yours.' : statusLine}
+                    </Text>
+
+                    {/* Next milestone */}
+                    {nextMilestone && !isDefeated && (
+                      <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>
+                        +{nextMilestone.needed} rep to {nextMilestone.tierName}: {nextMilestone.perk}
+                      </Text>
+                    )}
+                    {!nextMilestone && !isDefeated && (
+                      <Text style={{ fontSize: 11, color: colors.green, marginBottom: 3 }}>Maximum loyalty reached</Text>
+                    )}
+
+                    {/* On their turf indicator */}
+                    {onTheirTurf && !isDefeated && (
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3,
+                        backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3, alignSelf: 'flex-start',
+                      }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.blueLight }}>You're here</Text>
+                        {consignmentEnabled && rel >= FAVOR_FRIENDLY && !cp.consignment && (
+                          <Text style={{ fontSize: 11, color: colors.textMuted }}> -- consignment available</Text>
+                        )}
+                        {territoryEnabled && !cp.territories[cp.location] && (
+                          <Text style={{ fontSize: 11, color: colors.textMuted }}> -- territory for sale</Text>
+                        )}
+                      </View>
+                    )}
+
+                    {perks.length > 0 && (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                        {perks.map((perk, i) => (
+                          <View key={i} style={{
+                            backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2,
+                          }}>
+                            <Text style={{ fontSize: 11, color: colors.textMuted }}>{perk}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
           );
         })}

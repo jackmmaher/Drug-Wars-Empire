@@ -76,9 +76,9 @@ export function CopScreen() {
   const isGangCollector = !!cops.gangCollector;
   const isGangWarBattle = !!cops.gangWarBattle;
   const law = cops.regionLaw || DEFAULT_LAW;
-  const bribeCost = cops.bribeCost * cops.count;
-  const used = inventoryCount(cp.inventory);
   const mods = getPersonaModifiers(cp.personaId);
+  const bribeCost = Math.round(cops.bribeCost * cops.count * mods.bribeCostMultiplier);
+  const used = inventoryCount(cp.inventory);
 
   const inventoryValue = Object.entries(cp.inventory).reduce(
     (sum, [id, qty]) => sum + qty * ((cp.prices[id] as number) || 0), 0
@@ -168,6 +168,10 @@ export function CopScreen() {
     const gangName = gang?.name || 'The gang';
     const remaining = con.amountOwed - con.amountPaid;
     const payAmount = Math.round(remaining * 1.5);
+    const totalAssets = cp.cash + inventoryValue;
+    const canPay = totalAssets >= payAmount * 0.5; // Need at least 50% to settle
+    const bhFightChance = Math.round((cp.gun ? 35 : 10) + mods.copFightKillBonus * 100);
+    const bhRunChance = Math.round(35 + mods.copRunChanceBonus * 100);
 
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
@@ -196,17 +200,28 @@ export function CopScreen() {
 
           <View style={{ width: 320, gap: 10 }}>
             <View>
-              <TouchableOpacity style={[actionBtn, { backgroundColor: colors.yellow }]} onPress={() => copAct('bribe')} activeOpacity={0.8}>
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+              <TouchableOpacity
+                style={[
+                  actionBtn, { backgroundColor: colors.yellow },
+                  !canPay && { backgroundColor: colors.cardBorder, opacity: 0.4 },
+                ]}
+                onPress={() => copAct('bribe')}
+                activeOpacity={0.8}
+                disabled={!canPay}
+              >
+                <Text style={[
+                  { color: '#fff', fontSize: 16, fontWeight: '700' },
+                  !canPay && { color: colors.textDarkest },
+                ]}>
                   PAY UP <Text style={{ opacity: 0.7 }}>{$(payAmount)}</Text>
                 </Text>
               </TouchableOpacity>
-              <Text style={subtitleStyle}>Guaranteed. Settles the debt with penalty.</Text>
+              <Text style={subtitleStyle}>{canPay ? 'Settles the debt (cash + drugs).' : 'Not enough assets to settle.'}</Text>
             </View>
             <View>
               <TouchableOpacity style={[actionBtn, { backgroundColor: colors.red }]} onPress={() => copAct('fight')} activeOpacity={0.8}>
                 <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
-                  {cp.gun ? 'FIGHT (armed)' : 'FIGHT (fists)'} <Text style={{ opacity: 0.7 }}>{cp.gun ? '35%' : '10%'} win</Text>
+                  {cp.gun ? 'FIGHT (armed)' : 'FIGHT (fists)'} <Text style={{ opacity: 0.7 }}>{bhFightChance}% win</Text>
                 </Text>
               </TouchableOpacity>
               <Text style={subtitleStyle}>If you lose: take damage, may lose drugs</Text>
@@ -214,7 +229,7 @@ export function CopScreen() {
             <View>
               <TouchableOpacity style={[actionBtn, { backgroundColor: colors.blue }]} onPress={() => copAct('run')} activeOpacity={0.8}>
                 <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
-                  RUN <Text style={{ opacity: 0.7 }}>35%</Text>
+                  RUN <Text style={{ opacity: 0.7 }}>{bhRunChance}%</Text>
                 </Text>
               </TouchableOpacity>
               <Text style={subtitleStyle}>If caught: take damage, debt remains</Text>

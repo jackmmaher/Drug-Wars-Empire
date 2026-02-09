@@ -36,19 +36,30 @@ export function GameHeader() {
   return (
     <View>
       {/* Header */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-            <Text style={{ fontSize: 24, fontWeight: '900', color: colors.white }}>{$(cp.cash)}</Text>
-            {cp.streak > 1 && (
-              <Text style={{ fontSize: 11, fontWeight: '800', color: colors.yellow }}>({cp.streak}x)</Text>
-            )}
+      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          {/* Left: Day + Cash */}
+          <View>
+            <Text style={{ fontSize: 11, color: colors.textDark, letterSpacing: 1, fontWeight: '600' }}>
+              {gameMode === 'campaign' && <Text style={{ color: colors.yellow, fontWeight: '800' }}>L{campaign.level} </Text>}
+              DAY {Math.min(cp.day, daysLimit)}/{daysLimit}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={{ fontSize: 24, fontWeight: '900', color: colors.white }}>{$(cp.cash)}</Text>
+              {cp.streak > 1 && (
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.yellow }}>({cp.streak}x)</Text>
+              )}
+            </View>
+            <Text style={{ fontSize: 11, color: colors.textDark }}>Cash on hand</Text>
           </View>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: nw > 0 ? colors.green : colors.red }}>{$(nw)}</Text>
-          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, fontWeight: '600' }}>
-            {gameMode === 'campaign' && <Text style={{ color: colors.yellow, fontWeight: '800' }}>L{campaign.level} </Text>}
-            D{Math.min(cp.day, daysLimit)}/{daysLimit}
-          </Text>
+          {/* Right: Rank + Net Worth */}
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 11, color: colors.textDark, letterSpacing: 1, fontWeight: '600' }}>
+              {rank.emoji} {rank.name.toUpperCase()}
+            </Text>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: nw > 0 ? colors.green : colors.red }}>{$(nw)}</Text>
+            <Text style={{ fontSize: 11, color: colors.textDark }}>Net worth</Text>
+          </View>
         </View>
 
         <View style={{ flexDirection: 'row', gap: 4, marginVertical: 5 }}>
@@ -69,10 +80,10 @@ export function GameHeader() {
 
         <View style={{ flexDirection: 'row', gap: 4 }}>
           <View style={{ flex: 1 }}>
-            <Bar percent={cp.heat} color={cp.heat < 30 ? colors.green : cp.heat < 60 ? colors.yellow : colors.red} />
+            <Bar label="HEAT" percent={cp.heat} color={cp.heat < 30 ? colors.green : cp.heat < 60 ? colors.yellow : colors.red} />
           </View>
           <View style={{ flex: 1 }}>
-            <Bar percent={cp.hp} color={cp.hp > 60 ? colors.green : cp.hp > 30 ? colors.yellow : colors.red} />
+            <Bar label="HP" percent={cp.hp} color={cp.hp > 60 ? colors.green : cp.hp > 30 ? colors.yellow : colors.red} />
           </View>
         </View>
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, getLevelConfig, DAYS_PER_LEVEL } from '../constants/game';
+import { $, getLevelConfig, getPersonaModifiers, DAYS_PER_LEVEL } from '../constants/game';
 import { netWorth } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
@@ -53,7 +53,7 @@ export function LevelIntroScreen() {
             {player.gun && <Text style={{ fontSize: 14, color: colors.yellow }}>Armed</Text>}
             {config.startingDebt > 0 && (
               <Text style={{ fontSize: 14, color: colors.red, marginTop: 4 }}>
-                New debt: {$(config.startingDebt)} ({config.debtSource})
+                New debt: {$(Math.round(config.startingDebt * getPersonaModifiers(player.personaId).startingDebtMultiplier))} ({config.debtSource})
               </Text>
             )}
           </View>

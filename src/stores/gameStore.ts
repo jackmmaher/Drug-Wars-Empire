@@ -200,14 +200,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (result.notifications.length > 0 && result.player === s.player) return;
 
-    // Campaign L3: gang war encounter + territory raid checks
+    // Same-location travel — no-op, don't increment ad counter
+    if (result.player.location === s.player.location && result.phase === 'playing' && result.player.day === s.player.day) {
+      return;
+    }
+
+    // Gang war encounter + territory raid checks (campaign L3 OR classic with active war)
     let finalPlayer = result.player;
     let finalPhase = result.phase;
     let updatedCampaign = s.campaign;
 
-    if (s.gameMode === 'campaign' && s.campaign.level === 3) {
-      // Territory raid check (only when not already in an encounter)
-      if (finalPhase === 'playing') {
+    const hasGangWarFeatures = (s.gameMode === 'campaign' && s.campaign.level === 3) || (s.gameMode === 'classic' && s.campaign.gangWar.activeWar);
+
+    if (hasGangWarFeatures) {
+      // Territory raid check (only when not already in an encounter, campaign only)
+      if (finalPhase === 'playing' && s.gameMode === 'campaign') {
         const raid = checkTerritoryRaid(finalPlayer, updatedCampaign);
         if (raid) {
           const atLocation = finalPlayer.location === raid.locationId;
@@ -220,8 +227,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // Gang war encounter check — OVERRIDES regular cop encounters
-      if (checkGangWarEncounter(finalPlayer, updatedCampaign)) {
+      // Gang war encounter check — only when phase is 'playing' (don't override cops, bounty hunters, or game end)
+      if (finalPhase === 'playing' && checkGangWarEncounter(finalPlayer, updatedCampaign)) {
         const war = updatedCampaign.gangWar.activeWar!;
         const gang = GANGS.find(g => g.id === war.targetGangId);
         const onTurf = gang?.turf.includes(finalPlayer.location);

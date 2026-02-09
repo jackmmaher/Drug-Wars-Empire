@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, GANGS, DRUGS, REGIONS, LOCATIONS, getRank, getRegionForLocation, getRegionLocations, isRegionAvailable, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD } from '../constants/game';
+import { $, GANGS, DRUGS, REGIONS, LOCATIONS, getRank, getRegionForLocation, getRegionLocations, isRegionAvailable, getPersonaModifiers, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
-import { inventoryCount } from '../lib/game-logic';
+import { inventoryCount, netWorth, getFingerMovePenalty } from '../lib/game-logic';
 import type { CampaignLevel } from '../types/game';
 
 function getRelationColor(rel: number, colors: any): string {
@@ -35,6 +35,10 @@ export function MapTab() {
   const conOrigin = cp.consignment?.originLocation;
   const conOverdue = cp.consignment && cp.consignment.turnsLeft <= 0;
   const forecast = cp.forecast;
+  const nw = netWorth(cp);
+  const flyScale = Math.max(1, Math.floor(nw / 500_000) + 1);
+  const fingerMovePenalty = getFingerMovePenalty(cp.fingers);
+  const personaMods = getPersonaModifiers(cp.personaId);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 }}>
@@ -120,15 +124,17 @@ export function MapTab() {
         {otherRegions.map(r => {
           const isNyc = r.id === 'nyc';
           const regionAvailable = isRegionAvailable(cp.campaignLevel, r.id, gameMode);
-          const flyCost = isNyc ? Math.round((currentRegion?.flyCost || 0) / 2) : r.flyCost;
+          const baseFlyCost = isNyc ? Math.round((currentRegion?.flyCost || 0) / 2) : r.flyCost;
+          const flyCost = baseFlyCost * flyScale;
           const repNeeded = isNyc ? 0 : r.rep;
           const ok = regionAvailable && cp.rep >= repNeeded;
 
-          const customsRisk = carryingUnits > 0 ? Math.round(
-            Math.max(0.05, Math.min(0.75,
-              r.customsStrictness + carryingUnits * 0.002 + cp.heat * 0.002 - (cp.space > 100 ? 0.05 : 0)
-            )) * 100
-          ) : 0;
+          const rawCustomsRisk = carryingUnits > 0 ? Math.max(0.05, Math.min(0.75,
+            r.customsStrictness + carryingUnits * 0.002 + cp.heat * 0.002 - (cp.space > 100 ? 0.05 : 0)
+          )) : 0;
+          const customsRisk = carryingUnits > 0
+            ? Math.round(rawCustomsRisk * (1 - personaMods.customsEvasionBonus) * 100)
+            : 0;
 
           // Build cheap/expensive drug lists from price multipliers
           const cheapDrugs = Object.entries(r.priceMultipliers)
@@ -176,7 +182,7 @@ export function MapTab() {
               {/* Cost & travel time */}
               {ok && (
                 <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                  {$(flyCost)} {'\u2022'} {isNyc ? (currentRegion?.travelDays || 2) : r.travelDays} days
+                  {$(flyCost)} {'\u2022'} {(isNyc ? (currentRegion?.travelDays || 2) : r.travelDays) + fingerMovePenalty} days
                 </Text>
               )}
 
