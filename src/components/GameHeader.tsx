@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, DAYS, LOCATIONS, getRank, getRegionForLocation } from '../constants/game';
+import { $, DAYS, LOCATIONS, RANKS, REGIONS, DRUGS, getRank, getRegionForLocation } from '../constants/game';
 import { inventoryCount, netWorth } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
@@ -11,6 +11,8 @@ export function GameHeader() {
   const cp = useGameStore(s => s.currentPlayer());
   const mode = useGameStore(s => s.mode);
   const turn = useGameStore(s => s.turn);
+  const subPanel = useGameStore(s => s.subPanel);
+  const setSubPanel = useGameStore(s => s.setSubPanel);
 
   const rank = getRank(cp.rep);
   const nw = netWorth(cp);
@@ -90,8 +92,53 @@ export function GameHeader() {
           {Object.keys(cp.territories).length > 0 && (
             <Text style={styles.terrCount}>{Object.keys(cp.territories).length}🏴</Text>
           )}
+          <TouchableOpacity onPress={() => setSubPanel('help')} style={styles.helpBtn}>
+            <Text style={styles.helpBtnText}>?</Text>
+          </TouchableOpacity>
         </View>
       </View>
+
+      {/* Help panel */}
+      {subPanel === 'help' && (
+        <View style={styles.helpPanel}>
+          <ScrollView style={{ maxHeight: 260 }}>
+            <Text style={styles.helpTitle}>HOW TO PLAY</Text>
+            <Text style={styles.helpText}>Buy low, sell high. Travel between cities to find better prices. Pay off your debt before day 30.</Text>
+
+            <Text style={styles.helpTitle}>BANK & SHARK</Text>
+            <Text style={styles.helpText}>Visit a capital city (marked 🏦🦈) to deposit cash at 5%/day interest, or borrow from the shark at 10%/day. Every region's capital has both.</Text>
+
+            <Text style={styles.helpTitle}>HEAT & COPS</Text>
+            <Text style={styles.helpText}>Buying and selling raises heat. High heat = more cop encounters. Bribe, run, or fight your way out.</Text>
+
+            <Text style={styles.helpTitle}>REPUTATION</Text>
+            <Text style={styles.helpText}>Earn rep by making profitable trades. Higher rep unlocks international regions and new ranks:</Text>
+            {RANKS.map(r => (
+              <Text key={r.name} style={styles.helpItem}>{r.emoji} {r.name} — {r.rep} rep</Text>
+            ))}
+
+            <Text style={styles.helpTitle}>INTERNATIONAL TRAVEL</Text>
+            <Text style={styles.helpText}>Fly to other regions for cheaper drugs. Each has 6 cities, a local gang, and unique price discounts. Return to NYC costs half price.</Text>
+            {REGIONS.filter(r => r.id !== 'nyc').map(r => (
+              <Text key={r.id} style={styles.helpItem}>
+                {r.emoji} {r.name} — {r.rep} rep, ${r.flyCost.toLocaleString()} flight{'\n'}
+                {'   '}{Object.entries(r.priceMultipliers).map(([d, m]) =>
+                  `${DRUGS.find(x => x.id === d)?.name} -${Math.round((1 - m) * 100)}%`
+                ).join(', ')}
+              </Text>
+            ))}
+
+            <Text style={styles.helpTitle}>GANGS & TERRITORY</Text>
+            <Text style={styles.helpText}>Some cities are gang turf. Trade there to build relations. At 25+ rep you can claim territory for daily tribute income. Bad relations = taxes.</Text>
+
+            <Text style={styles.helpTitle}>INFORMANTS</Text>
+            <Text style={styles.helpText}>At 10+ rep you may meet a rat who gives price tips. Pay them to keep loyalty up — low loyalty = they flip on you.</Text>
+          </ScrollView>
+          <TouchableOpacity onPress={() => setSubPanel(null)} style={styles.helpClose}>
+            <Text style={styles.helpCloseText}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Event */}
       {cp.currentEvent && (
@@ -146,8 +193,6 @@ function OfferBanner() {
     </View>
   );
 }
-
-import { TouchableOpacity } from 'react-native';
 
 const styles = StyleSheet.create({
   container: {},
@@ -221,8 +266,37 @@ const styles = StyleSheet.create({
   locationDot: { width: 7, height: 7, borderRadius: 4 },
   locationName: { fontSize: 12, fontWeight: '800', color: colors.text },
   tributeText: { fontSize: 8, color: colors.green },
-  statusIcons: { marginLeft: 'auto', flexDirection: 'row', gap: 3 },
+  statusIcons: { marginLeft: 'auto', flexDirection: 'row', gap: 3, alignItems: 'center' },
   terrCount: { fontSize: 10 },
+  helpBtn: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpBtnText: { fontSize: 9, fontWeight: '800', color: colors.textDark },
+  helpPanel: {
+    marginHorizontal: 8,
+    marginBottom: 4,
+    padding: 8,
+    borderRadius: 5,
+    backgroundColor: 'rgba(30,41,59,0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  helpTitle: { fontSize: 8, fontWeight: '800', color: colors.yellow, letterSpacing: 1, marginTop: 6, marginBottom: 2 },
+  helpText: { fontSize: 9, color: colors.textDim, lineHeight: 14 },
+  helpItem: { fontSize: 8, color: colors.textMuted, paddingLeft: 6, lineHeight: 13 },
+  helpClose: {
+    marginTop: 6,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 3,
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  helpCloseText: { fontSize: 9, fontWeight: '700', color: colors.textDark, letterSpacing: 1 },
   eventBar: {
     marginHorizontal: 8,
     marginBottom: 3,

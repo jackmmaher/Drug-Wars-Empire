@@ -13,11 +13,12 @@ export function generatePrices(locationId: string, event: MarketEvent | null): R
   const mults = region?.priceMultipliers || {};
   const prices: Record<string, number | null> = {};
   DRUGS.forEach(d => {
-    if (C(0.12)) { prices[d.id] = null; return; }
+    const isEventDrug = event && event.drugId === d.id;
+    if (!isEventDrug && C(0.12)) { prices[d.id] = null; return; }
     let pr = R(d.min, d.max);
     if (mults[d.id]) pr = Math.round(pr * mults[d.id]);
-    if (event && event.drugId === d.id) {
-      pr = Math.round(d.min * event.multiplier + Math.random() * d.min * 0.15);
+    if (isEventDrug) {
+      pr = Math.round(d.min * event!.multiplier + Math.random() * d.min * 0.15);
       if (mults[d.id]) pr = Math.round(pr * mults[d.id]);
     }
     prices[d.id] = Math.max(1, pr);

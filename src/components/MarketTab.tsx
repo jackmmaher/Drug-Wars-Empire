@@ -166,11 +166,24 @@ export function MarketTab() {
       {/* Inventory summary */}
       {Object.keys(cp.inventory).length > 0 && (
         <View style={styles.invSummary}>
+          <Text style={styles.invHeader}>CARRYING {used}/{cp.space}</Text>
           {Object.entries(cp.inventory).filter(([, q]) => q > 0).map(([id, q]) => {
             const d = DRUGS.find(x => x.id === id);
+            const pr = cp.prices[id] as number | null;
+            const val = pr ? q * pr : 0;
+            const ab = cp.averageCosts[id];
+            const pnl = pr && ab ? ((pr - ab) / ab * 100) : null;
             return (
               <View key={id} style={styles.invTag}>
-                <Text style={styles.invTagText}>{d?.emoji}{q}</Text>
+                <Text style={styles.invTagEmoji}>{d?.emoji}</Text>
+                <Text style={styles.invTagName}>{d?.name}</Text>
+                <Text style={styles.invTagQty}>x{q}</Text>
+                {val > 0 && <Text style={styles.invTagVal}>{$(val)}</Text>}
+                {pnl !== null && (
+                  <Text style={[styles.invTagPnl, { color: pnl > 0 ? colors.green : pnl < 0 ? colors.red : colors.textDark }]}>
+                    {pnl > 0 ? '+' : ''}{pnl.toFixed(0)}%
+                  </Text>
+                )}
               </View>
             );
           })}
@@ -261,12 +274,20 @@ const styles = StyleSheet.create({
   sellBtn: { backgroundColor: colors.yellow },
   tradeBtnDisabled: { backgroundColor: '#0f172a' },
   tradeBtnText: { fontSize: 9, fontWeight: '800' },
-  invSummary: { flexDirection: 'row', gap: 3, flexWrap: 'wrap', marginTop: 4 },
+  invSummary: { marginTop: 6, gap: 2 },
+  invHeader: { fontSize: 7, color: colors.textDark, letterSpacing: 1, marginBottom: 2 },
   invTag: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.02)',
     borderRadius: 3,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    gap: 4,
   },
-  invTagText: { fontSize: 9, color: colors.textDim },
+  invTagEmoji: { fontSize: 12 },
+  invTagName: { fontSize: 10, fontWeight: '600', color: colors.textDim, flex: 1 },
+  invTagQty: { fontSize: 10, fontWeight: '800', color: colors.text },
+  invTagVal: { fontSize: 9, color: colors.textMuted, width: 52, textAlign: 'right' },
+  invTagPnl: { fontSize: 8, fontWeight: '700', width: 32, textAlign: 'right' },
 });

@@ -167,10 +167,11 @@ function genP(loc, ev) {
   const pm = reg?.pm || {};
   const p = {};
   DRUGS.forEach(d => {
-    if(C(0.12)){p[d.id]=null;return;}
+    const isEvDrug = ev && ev.d===d.id;
+    if(!isEvDrug && C(0.12)){p[d.id]=null;return;}
     let pr = R(d.min,d.max);
     if(pm[d.id]) pr = Math.round(pr*pm[d.id]);
-    if(ev && ev.d===d.id) { pr = Math.round(d.min*ev.x + Math.random()*d.min*0.15); if(pm[d.id]) pr=Math.round(pr*pm[d.id]); }
+    if(isEvDrug) { pr = Math.round(d.min*ev.x + Math.random()*d.min*0.15); if(pm[d.id]) pr=Math.round(pr*pm[d.id]); }
     p[d.id] = Math.max(1,pr);
   });
   return p;
@@ -186,10 +187,10 @@ function init(mode="solo") {
     rep:0,profit:0,best:0,trades:0,strk:0,mstrk:0,combo:1,
     avg:{},terr:{},gang:Object.fromEntries(GANGS.map(g=>[g.id,0])),
     rat:mkRat(),ev:ev,evs:ev?[{d:1,m:ev.m,t:ev.t}]:[],
-    nms:[],offer:null,cops:null,trib:0,intl:false,
+    nms:[],offer:null,cops:null,trib:0,intl:false,recentSold:[],
     close:0,miles:[],newMile:null,
   });
-  if(mode==="2p") return {mode:"2p",phase:"title",turn:1,p1:{...base(),nm:"Player 1",pc:"#ef4444"},p2:{...base(),nm:"Player 2",pc:"#3b82f6",loc:"brooklyn",prices:genP("brooklyn",null)}};
+  if(mode==="2p"){const ev2=C(0.35)?EVTS[R(0,EVTS.length-1)]:null;return {mode:"2p",phase:"title",turn:1,p1:{...base(),nm:"Player 1",pc:"#ef4444"},p2:{...base(),nm:"Player 2",pc:"#3b82f6",loc:"brooklyn",ev:ev2,evs:ev2?[{d:1,m:ev2.m,t:ev2.t}]:[],prices:genP("brooklyn",ev2)}};}
   return {mode:"solo",phase:"title",...base()};
 }
 
@@ -278,6 +279,7 @@ export default function App() {
           if(now&&now>rs.price*2) nms.push({drug:DRUGS.find(x=>x.id===rs.id),pr:rs.price,now,q:rs.qty,miss:rs.qty*(now-rs.price),type:"sold_early"});
         }
       }
+      p.nms=nms;
       p.recentSold=[];
       // Gang tax
       const lg=GANGS.find(g=>g.turf.includes(p.loc));
@@ -595,8 +597,29 @@ export default function App() {
           <div style={{marginLeft:"auto",display:"flex",gap:3}}>
             {cp.gun&&<span>🔫</span>}{cp.rat.hired&&cp.rat.alive&&<span title={`${cp.rat.name} ${cp.rat.loy}%`}>🐀</span>}
             {Object.keys(cp.terr).length>0&&<span style={{fontSize:10}}>{Object.keys(cp.terr).length}🏴</span>}
+            <button onClick={()=>sUi(u=>({...u,sub:u.sub==="help"?null:"help"}))} style={{width:16,height:16,borderRadius:8,background:"rgba(255,255,255,0.06)",border:"none",fontSize:9,fontWeight:800,color:"#334155",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",padding:0}}>?</button>
           </div>
         </div>
+        {/* Help panel */}
+        {ui.sub==="help"&&<div style={{margin:"0 8px 4px",padding:8,borderRadius:5,background:"rgba(30,41,59,0.95)",border:"1px solid rgba(255,255,255,0.08)",maxHeight:260,overflow:"auto"}}>
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:2,marginBottom:2}}>HOW TO PLAY</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Buy low, sell high. Travel between cities to find better prices. Pay off your debt before day 30.</div>
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>BANK & SHARK</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Visit a capital city (marked 🏦🦈) to deposit cash at 5%/day interest, or borrow from the shark at 10%/day. Every region's capital has both.</div>
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>HEAT & COPS</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Buying and selling raises heat. High heat = more cop encounters. Bribe, run, or fight your way out.</div>
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>REPUTATION</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Earn rep by making profitable trades. Higher rep unlocks international regions and new ranks:</div>
+          {RANKS.map(r=><div key={r.n} style={{fontSize:8,color:"#475569",paddingLeft:6,lineHeight:1.6}}>{r.e} {r.n} — {r.r} rep</div>)}
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>INTERNATIONAL TRAVEL</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Fly to other regions for cheaper drugs. Each has 6 cities, a local gang, and unique price discounts. Return to NYC costs half price.</div>
+          {REGIONS.filter(r=>r.id!=="nyc").map(r=><div key={r.id} style={{fontSize:8,color:"#475569",paddingLeft:6,lineHeight:1.6}}>{r.em} {r.name} — {r.rep} rep, ${r.fly.toLocaleString()} flight{"\n   "}{Object.entries(r.pm).map(([d,m])=>`${DRUGS.find(x=>x.id===d)?.name} -${Math.round((1-m)*100)}%`).join(", ")}</div>)}
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>GANGS & TERRITORY</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Some cities are gang turf. Trade there to build relations. At 25+ rep you can claim territory for daily tribute income. Bad relations = taxes.</div>
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>INFORMANTS</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>At 10+ rep you may meet a rat who gives price tips. Pay them to keep loyalty up — low loyalty = they flip on you.</div>
+          <button onClick={()=>sUi(u=>({...u,sub:null}))} style={{marginTop:6,background:"rgba(255,255,255,0.05)",border:"none",borderRadius:3,padding:"4px 0",width:"100%",fontSize:9,fontWeight:700,color:"#334155",letterSpacing:1,cursor:"pointer",fontFamily:"inherit"}}>CLOSE</button>
+        </div>}
         {/* EVENT */}
         {cp.ev&&<div style={{margin:"0 8px 3px",padding:"5px 8px",borderRadius:5,background:cp.ev.t==="spike"?"rgba(239,68,68,0.08)":"rgba(34,197,94,0.08)",border:`1px solid ${cp.ev.t==="spike"?"#ef444425":"#22c55e25"}`,fontSize:10,color:cp.ev.t==="spike"?"#fca5a5":"#86efac",fontWeight:600}}>{cp.ev.t==="spike"?"📈":"📉"} {cp.ev.m}</div>}
         {/* NEAR MISS — DOPAMINE */}
@@ -661,8 +684,15 @@ export default function App() {
               );
             })}
           </div>
-          {Object.keys(cp.inv).length>0&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginTop:4}}>
-            {Object.entries(cp.inv).filter(([,q])=>q>0).map(([id,q])=>{const d=DRUGS.find(x=>x.id===id);return<span key={id} style={{background:"rgba(255,255,255,0.03)",borderRadius:3,padding:"1px 5px",fontSize:9,color:"#64748b"}}>{d.e}{q}</span>;})}
+          {Object.keys(cp.inv).length>0&&<div style={{marginTop:6,display:"flex",flexDirection:"column",gap:2}}>
+            <div style={{fontSize:7,color:"#334155",letterSpacing:1,marginBottom:2}}>CARRYING {used}/{cp.spc}</div>
+            {Object.entries(cp.inv).filter(([,q])=>q>0).map(([id,q])=>{const d=DRUGS.find(x=>x.id===id);const pr=cp.prices[id];const val=pr?q*pr:0;const ab=cp.avg[id];const pnl=pr&&ab?((pr-ab)/ab*100):null;return<div key={id} style={{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.02)",borderRadius:3,padding:"3px 6px",gap:4}}>
+              <span style={{fontSize:12}}>{d.e}</span>
+              <span style={{fontSize:10,fontWeight:600,color:"#94a3b8",flex:1}}>{d.name}</span>
+              <span style={{fontSize:10,fontWeight:800,color:"#e2e8f0"}}>x{q}</span>
+              {val>0&&<span style={{fontSize:9,color:"#475569",width:52,textAlign:"right"}}>{$(val)}</span>}
+              {pnl!==null&&<span style={{fontSize:8,fontWeight:700,color:pnl>0?"#22c55e":pnl<0?"#ef4444":"#334155",width:32,textAlign:"right"}}>{pnl>0?"+":""}{pnl.toFixed(0)}%</span>}
+            </div>;})}
           </div>}
         </div>}
 
