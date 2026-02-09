@@ -1,6 +1,5 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 
-// TODO: Replace ca-pub-XXXXXXXXXXXXXXXX with real AdSense publisher ID
 export default function Root({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -11,13 +10,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
-
-        {/* Google AdSense */}
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
-          crossOrigin="anonymous"
+        <meta
+          httpEquiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data:; font-src 'self';"
         />
+        <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
+        <meta httpEquiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
 
         <ScrollViewStyleReset />
       </head>

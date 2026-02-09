@@ -470,7 +470,6 @@ export interface LevelConfig {
   name: string;
   subtitle: string;
   emoji: string;
-  adFrequency: number;
   copBaseModifier: number;
   customsModifier: number;
   eventVolatility: number;
@@ -500,7 +499,7 @@ export interface LevelConfig {
 export const LEVEL_CONFIGS: Record<CampaignLevel, LevelConfig> = {
   1: {
     level: 1, name: 'Solo Dealer', subtitle: 'Survive the streets. Pay off the shark.', emoji: '🧢',
-    adFrequency: 3, copBaseModifier: 0, customsModifier: 0, eventVolatility: 1.0,
+    copBaseModifier: 0, customsModifier: 0, eventVolatility: 1.0,
     startingDebt: STARTING_DEBT, debtSource: 'shark',
     rareSpawnMultiplier: 0.5,
     consignmentCapMultiplier: 1, gangLoanCapMultiplier: 1, territoryTributeMultiplier: 1,
@@ -510,7 +509,7 @@ export const LEVEL_CONFIGS: Record<CampaignLevel, LevelConfig> = {
   },
   2: {
     level: 2, name: 'Join a Gang', subtitle: 'Build connections. Go international.', emoji: '🤝',
-    adFrequency: 5, copBaseModifier: 0.03, customsModifier: 0, eventVolatility: 1.0,
+    copBaseModifier: 0.03, customsModifier: 0, eventVolatility: 1.0,
     startingDebt: 8000, debtSource: 'gang protection fee',
     rareSpawnMultiplier: 1.0,
     consignmentCapMultiplier: 1, gangLoanCapMultiplier: 1, territoryTributeMultiplier: 1,
@@ -520,7 +519,7 @@ export const LEVEL_CONFIGS: Record<CampaignLevel, LevelConfig> = {
   },
   3: {
     level: 3, name: 'Gang Takeover', subtitle: 'Dominate the empire. Crush the competition.', emoji: '👑',
-    adFrequency: 7, copBaseModifier: 0.05, customsModifier: 0.05, eventVolatility: 1.2,
+    copBaseModifier: 0.05, customsModifier: 0.05, eventVolatility: 1.2,
     startingDebt: 0, debtSource: '',
     rareSpawnMultiplier: 1.0,
     consignmentCapMultiplier: 1.5, gangLoanCapMultiplier: 1.5, territoryTributeMultiplier: 1.5,

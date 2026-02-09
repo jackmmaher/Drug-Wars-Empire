@@ -5,7 +5,6 @@ import { $, MILESTONES, DAYS, getRank, PERSONAS, DAYS_PER_LEVEL, getLevelConfig 
 import { netWorth } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { submitScore, fetchLeaderboard, type ScoreEntry } from '../lib/leaderboard';
-import { AdBanner } from './AdBanner';
 
 export function EndScreen() {
   const { colors } = useTheme();
@@ -121,8 +120,6 @@ export function EndScreen() {
             </Text>
           ))}
         </View>
-
-        <AdBanner slot="end-banner" />
 
         {leaderboard.length > 0 && (
           <View style={{ marginTop: 14, width: '100%', maxWidth: 420 }}>

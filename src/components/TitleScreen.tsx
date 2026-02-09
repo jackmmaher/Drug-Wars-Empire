@@ -3,7 +3,6 @@ import { View, Text, TouchableOpacity, TextInput, ScrollView, type ScrollView as
 import { useTheme } from '../contexts/ThemeContext';
 import { PERSONAS, DEFAULT_MODIFIERS, LOCATIONS } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
-import { AdBanner } from './AdBanner';
 import type { PersonaModifiers } from '../types/game';
 
 function getModifierLines(mods: PersonaModifiers): Array<{ text: string; positive: boolean }> {
@@ -380,7 +379,6 @@ export function TitleScreen() {
         <Text style={{ fontSize: 11, color: colors.textDarkest, marginTop: 14 }}>Based on John E. Dell's 1984 classic</Text>
       </View>
 
-      <AdBanner slot="title-banner" />
     </ScrollView>
   );
 }

@@ -12,7 +12,7 @@ import {
   checkGangWarEncounter, checkTerritoryRaid, resolveTerritoryRaid,
   type SideEffect,
 } from '../lib/game-logic';
-import { getRank, DAYS, DRUGS, LOCATIONS, GANGS, DAYS_PER_LEVEL, getLevelConfig, R } from '../constants/game';
+import { getRank, DAYS, DRUGS, LOCATIONS, GANGS, DAYS_PER_LEVEL, R } from '../constants/game';
 import { processSideEffects } from '../lib/audio';
 
 interface Notification {
@@ -41,10 +41,6 @@ interface GameStore {
   notifications: Notification[];
   hasSeenRules: boolean;
   helpSeen: Record<string, boolean>;
-
-  // Ad state
-  travelCount: number;
-  showingAd: boolean;
 
   // Computed helpers
   usedSpace: () => number;
@@ -82,7 +78,6 @@ interface GameStore {
   setSubPanel: (panel: string | null) => void;
   setPlayerName: (name: string) => void;
   dismissRules: () => void;
-  dismissAd: () => void;
   markHelpSeen: (key: string) => void;
   resetToTitle: () => void;
   notify: (message: string, type?: string) => void;
@@ -110,8 +105,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   notifications: [],
   hasSeenRules: false,
   helpSeen: {},
-  travelCount: 0,
-  showingAd: false,
 
   // Computed
   usedSpace: () => inventoryCount(get().player.inventory),
@@ -249,13 +242,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Increment travel counter for ad interstitial timing
-    const newTravelCount = s.travelCount + 1;
-    const adFreq = s.gameMode === 'campaign' ? getLevelConfig(s.campaign.level).adFrequency : 5;
-    const shouldShowAd = newTravelCount > 0 && newTravelCount % adFreq === 0
-      && finalPhase === 'playing'; // No ads before cop encounters or game end
-
-    set({ player: finalPlayer, phase: finalPhase, campaign: updatedCampaign, travelCount: newTravelCount, showingAd: shouldShowAd });
+    set({ player: finalPlayer, phase: finalPhase, campaign: updatedCampaign });
   },
 
   openTrade: (drugId, type) => {
@@ -387,11 +374,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setTab: (tab) => set({ activeTab: tab, subPanel: null }),
   setSubPanel: (panel) => set(s => ({ subPanel: s.subPanel === panel ? null : panel })),
 
-  setPlayerName: (name) => set({ playerName: name }),
+  setPlayerName: (name) => {
+    // Sanitize: strip dangerous chars, limit length
+    const clean = name.replace(/[<>"';&\\]/g, '').slice(0, 20);
+    set({ playerName: clean });
+  },
 
   dismissRules: () => set({ hasSeenRules: true }),
-
-  dismissAd: () => set({ showingAd: false }),
 
   markHelpSeen: (key) => set(s => ({ helpSeen: { ...s.helpSeen, [key]: true } })),
 
@@ -410,8 +399,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       helpSeen: s.helpSeen,
       playerName: s.playerName,
       selectedPersona: null,
-      travelCount: 0,
-      showingAd: false,
     }));
   },
 
