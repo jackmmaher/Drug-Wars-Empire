@@ -74,9 +74,9 @@ export function EndScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView contentContainerStyle={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 24, paddingBottom: 40 }}>
-        <Text style={{ fontSize: 64, marginBottom: 6 }}>{isWin ? fr.emoji : '\uD83D\uDC80'}</Text>
-        <Text style={{ fontSize: 34, fontWeight: '900', marginBottom: 6, color: isWin ? colors.green : colors.red }}>
+      <ScrollView contentContainerStyle={{ alignItems: 'center', paddingTop: 36, paddingHorizontal: 24, paddingBottom: 30 }}>
+        <Text style={{ fontSize: 52, marginBottom: 4 }}>{isWin ? fr.emoji : '\uD83D\uDC80'}</Text>
+        <Text style={{ fontSize: 30, fontWeight: '900', marginBottom: 4, color: isWin ? colors.green : colors.red }}>
           {isWin
             ? (isCampaign ? 'CAMPAIGN COMPLETE!' : 'SURVIVED')
             : cp.hp <= 0 ? 'DEAD'
@@ -88,32 +88,32 @@ export function EndScreen() {
           </Text>
         )}
 
-        <Text style={{ fontSize: 17, color: colors.yellow, fontWeight: '800' }}>{fr.name}</Text>
+        <Text style={{ fontSize: 15, color: colors.yellow, fontWeight: '800' }}>{fr.name}</Text>
         {persona && (
-          <Text style={{ fontSize: 14, color: colors.textDim, marginTop: 2 }}>{persona.emoji} {persona.name}</Text>
+          <Text style={{ fontSize: 13, color: colors.textDim, marginTop: 1 }}>{persona.emoji} {persona.name}</Text>
         )}
-        <Text style={{ fontSize: 30, fontWeight: '900', color: colors.white, marginVertical: 8 }}>Net: {$(fn)}</Text>
+        <Text style={{ fontSize: 26, fontWeight: '900', color: colors.white, marginVertical: 6 }}>Net: {$(fn)}</Text>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, maxWidth: 500, marginBottom: 20 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, maxWidth: 500, marginBottom: 14 }}>
           {stats.map((s, i) => (
             <View key={i} style={{
-              backgroundColor: colors.bgCard, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14,
-              alignItems: 'center', width: 120,
+              backgroundColor: colors.bgCard, borderRadius: 6, paddingVertical: 6, paddingHorizontal: 10,
+              alignItems: 'center', width: 110,
             }}>
-              <Text style={{ fontSize: 12, color: colors.textDark, textTransform: 'uppercase', letterSpacing: 1 }}>{s.label}</Text>
-              <Text style={[{ fontSize: 16, fontWeight: '800', color: colors.text }, s.color ? { color: s.color } : null]}>
+              <Text style={{ fontSize: 10, color: colors.textDark, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Text>
+              <Text style={[{ fontSize: 14, fontWeight: '800', color: colors.text }, s.color ? { color: s.color } : null]}>
                 {s.value}
               </Text>
             </View>
           ))}
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 16 }}>
+        <View style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 12 }}>
           {MILESTONES.map(m => (
             <Text
               key={m.id}
               style={[
-                { fontSize: 22 },
+                { fontSize: 20 },
                 !cp.milestones?.includes(m.id) && { opacity: 0.12 },
               ]}
             >
@@ -125,8 +125,8 @@ export function EndScreen() {
         <AdBanner slot="end-banner" />
 
         {leaderboard.length > 0 && (
-          <View style={{ marginTop: 20, width: '100%', maxWidth: 420 }}>
-            <Text style={{ fontSize: 17, fontWeight: '800', color: colors.yellow, letterSpacing: 2, marginBottom: 10, textAlign: 'center' }}>
+          <View style={{ marginTop: 14, width: '100%', maxWidth: 420 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.yellow, letterSpacing: 2, marginBottom: 6, textAlign: 'center' }}>
               LEADERBOARD
             </Text>
             {leaderboard.map((entry, i) => (
@@ -147,10 +147,13 @@ export function EndScreen() {
           </View>
         )}
 
+        <Text style={{ fontSize: 14, color: colors.textMuted, marginTop: 16, marginBottom: 8 }}>Think you can do better?</Text>
         <TouchableOpacity style={{
-          backgroundColor: colors.red, borderRadius: 8, paddingVertical: 14, paddingHorizontal: 40, marginTop: 20,
+          backgroundColor: colors.red, borderRadius: 10, paddingVertical: 16, paddingHorizontal: 48,
+          shadowColor: colors.red, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
+          elevation: 8,
         }} onPress={resetToTitle} activeOpacity={0.8}>
-          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 1 }}>PLAY AGAIN</Text>
+          <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 2 }}>{'\uD83C\uDFB2'} ONE MORE RUN</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

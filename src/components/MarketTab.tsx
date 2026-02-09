@@ -224,14 +224,6 @@ export function MarketTab() {
         const isRare = !!d.rare;
         const isRareAvailable = isRare && !!pr;
 
-        // Price range position (0-100)
-        const pricePercent = pr ? Math.min(100, Math.max(0, ((pr - d.min) / (d.max - d.min)) * 100)) : 50;
-        const priceZone = pricePercent < 25 ? 'buy' : pricePercent > 75 ? 'sell' : 'mid';
-        const priceBarColor = priceZone === 'buy' ? colors.green : priceZone === 'sell' ? colors.red : colors.yellow;
-
-        // Per-unit profit/loss
-        const perUnitPnl = pr && ab && own > 0 ? pr - ab : null;
-
         return (
           <View key={d.id} style={[
             {
@@ -248,7 +240,7 @@ export function MarketTab() {
               <Text style={{ fontSize: 18, width: 30 }}>{d.emoji}</Text>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{d.name}</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>{d.name}</Text>
                   {isRareAvailable && (
                     <View style={{ backgroundColor: '#d4a017', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
                       <Text style={{ fontSize: 9, fontWeight: '900', color: '#000', letterSpacing: 1 }}>RARE</Text>
@@ -262,7 +254,7 @@ export function MarketTab() {
                 )}
               </View>
               <Text style={[
-                { width: 80, textAlign: 'right', fontSize: 16, fontWeight: '800', color: colors.white },
+                { width: 80, textAlign: 'right', fontSize: 17, fontWeight: '900', color: colors.white },
                 !pr && { color: colors.textDarkest },
               ]}>
                 {pr ? $(pr) : '--'}
@@ -316,31 +308,6 @@ export function MarketTab() {
               )}
             </View>
 
-            {/* Price range bar */}
-            {pr && (
-              <View style={{ marginTop: 4, paddingLeft: 36 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <View style={{ flex: 1, height: 3, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden' }}>
-                    <View style={{
-                      position: 'absolute', left: 0, top: 0, bottom: 0,
-                      width: `${pricePercent}%`, backgroundColor: priceBarColor, borderRadius: 2,
-                    }} />
-                  </View>
-                  <Text style={{ fontSize: 9, color: priceBarColor, fontWeight: '700', width: 28 }}>
-                    {priceZone === 'buy' ? 'LOW' : priceZone === 'sell' ? 'HIGH' : 'MID'}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: 9, color: colors.textDarkest }}>{$(d.min)}</Text>
-                  {perUnitPnl !== null && (
-                    <Text style={{ fontSize: 9, fontWeight: '600', color: perUnitPnl > 0 ? colors.green : colors.red }}>
-                      {perUnitPnl > 0 ? '+' : ''}{$(perUnitPnl)}/unit vs avg
-                    </Text>
-                  )}
-                  <Text style={{ fontSize: 9, color: colors.textDarkest }}>{$(d.max)}</Text>
-                </View>
-              </View>
-            )}
           </View>
         );
       })}

@@ -205,25 +205,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let finalPhase = result.phase;
     let updatedCampaign = s.campaign;
 
-    if (s.gameMode === 'campaign' && s.campaign.level === 3 && finalPhase === 'playing') {
-      // Territory raid check
-      const raid = checkTerritoryRaid(finalPlayer, updatedCampaign);
-      if (raid) {
-        const atLocation = finalPlayer.location === raid.locationId;
-        const raidResult = resolveTerritoryRaid(finalPlayer, raid, atLocation);
-        finalPlayer = raidResult.player;
-        processEffects(raidResult.effects, set);
-        for (const e of raidResult.effects) {
-          if (e.type === 'shake') get().notify('Territory raided!', 'danger');
+    if (s.gameMode === 'campaign' && s.campaign.level === 3) {
+      // Territory raid check (only when not already in an encounter)
+      if (finalPhase === 'playing') {
+        const raid = checkTerritoryRaid(finalPlayer, updatedCampaign);
+        if (raid) {
+          const atLocation = finalPlayer.location === raid.locationId;
+          const raidResult = resolveTerritoryRaid(finalPlayer, raid, atLocation);
+          finalPlayer = raidResult.player;
+          processEffects(raidResult.effects, set);
+          for (const e of raidResult.effects) {
+            if (e.type === 'shake') get().notify('Territory raided!', 'danger');
+          }
         }
       }
 
-      // Gang war encounter check
-      if (checkGangWarEncounter(finalPlayer, updatedCampaign) && finalPhase === 'playing') {
+      // Gang war encounter check — OVERRIDES regular cop encounters
+      if (checkGangWarEncounter(finalPlayer, updatedCampaign)) {
         const war = updatedCampaign.gangWar.activeWar!;
         const gang = GANGS.find(g => g.id === war.targetGangId);
         const onTurf = gang?.turf.includes(finalPlayer.location);
-        const regionLaw = LOCATIONS.find(l => l.id === finalPlayer.location);
         finalPlayer = {
           ...finalPlayer,
           cops: {

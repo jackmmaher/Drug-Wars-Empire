@@ -64,7 +64,7 @@ export function MapTab() {
               disabled={cur}
               style={[
                 {
-                  width: '31%', borderWidth: 1, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 6,
+                  width: '31%', borderWidth: 1, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 6,
                   alignItems: 'center',
                   borderColor: cur ? l.color + '35' : own ? '#22c55e22' : conOrigin === l.id ? (conOverdue ? '#ef444440' : '#eab30840') : l.color + '12',
                 },
@@ -75,15 +75,15 @@ export function MapTab() {
               ]}
               activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 20, marginBottom: 2 }}>{l.emoji}</Text>
+              <Text style={{ fontSize: 18, marginBottom: 1 }}>{l.emoji}</Text>
               <Text style={[
-                { fontSize: 14, fontWeight: '600', color: colors.textDim, textAlign: 'center' },
+                { fontSize: 13, fontWeight: '600', color: colors.textDim, textAlign: 'center' },
                 cur && { color: l.color, fontWeight: '800' },
               ]}>{l.name}</Text>
               {cur && <Text style={{ fontSize: 10, color: colors.textDark, fontWeight: '600' }}>YOU ARE HERE</Text>}
 
               {/* Service badges */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 3, justifyContent: 'center' }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, marginTop: 2, justifyContent: 'center' }}>
                 {l.bank && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(59,130,246,0.1)', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
                     <Text style={{ fontSize: 9 }}>🏦</Text>
@@ -148,7 +148,7 @@ export function MapTab() {
               disabled={!ok}
               style={[
                 {
-                  width: '48%', borderWidth: 1, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 10,
+                  width: '48%', borderWidth: 1, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 8,
                 },
                 ok ? {
                   backgroundColor: r.color + '06',
@@ -161,9 +161,9 @@ export function MapTab() {
               ]}
               activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 20, marginBottom: 2 }}>{r.emoji}</Text>
+              <Text style={{ fontSize: 18, marginBottom: 1 }}>{r.emoji}</Text>
               <Text style={[
-                { fontSize: 14, fontWeight: '600', color: colors.textDim },
+                { fontSize: 13, fontWeight: '600', color: colors.textDim },
                 !ok && { color: colors.textDarkest },
               ]}>{r.name}</Text>
 

@@ -154,6 +154,8 @@ export interface CopEncounter {
     gangId: string;
     enemyStrength: number;
   };
+  lastResult?: string;
+  roundsCompleted?: number;
 }
 
 export interface Offer {

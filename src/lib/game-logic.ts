@@ -850,7 +850,7 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
 // ── Cop Actions (regional behavior) ───────────────────────
 export interface CopResult {
   player: PlayerState;
-  phase: 'playing' | 'end';
+  phase: 'playing' | 'cop' | 'end';
   effects: SideEffect[];
 }
 
@@ -902,28 +902,53 @@ export function copAction(player: PlayerState, action: 'run' | 'fight' | 'bribe'
       p.eventLog = [...p.eventLog, { day: p.day, message: `${law.forceEmoji} ${law.forceName} caught you! Lost $${l} and product.`, type: 'danger' }];
     }
   } else if (action === 'fight') {
-    let kl = 0, dm = 0;
-    for (let i = 0; i < c.count; i++) {
-      // Corrupt: lower fight damage. Methodical: harder fight. + persona
-      let killChance = (p.gun ? 0.45 : 0.15) + cMods.copFightKillBonus;
-      let dmMin = p.gun ? 5 : 12;
-      let dmMax = p.gun ? 15 : 30;
-      if (law.behavior === 'corrupt') { dmMin = Math.max(1, dmMin - 3); dmMax -= 5; }
-      if (law.behavior === 'methodical') { killChance -= 0.05; dmMin += 3; dmMax += 5; }
+    // Multi-round: resolve ONE cop per round
+    let killChance = (p.gun ? 0.45 : 0.15) + cMods.copFightKillBonus;
+    let dmMin = p.gun ? 5 : 12;
+    let dmMax = p.gun ? 15 : 30;
+    if (law.behavior === 'corrupt') { dmMin = Math.max(1, dmMin - 3); dmMax -= 5; }
+    if (law.behavior === 'methodical') { killChance -= 0.05; dmMin += 3; dmMax += 5; }
 
-      if (C(killChance)) kl++;
-      else dm += R(dmMin, dmMax);
+    const roundNum = (c.roundsCompleted || 0) + 1;
+
+    if (C(killChance)) {
+      // Killed one cop
+      const newCount = c.count - 1;
+      p.heat = Math.min(HEAT_CAP, p.heat + Math.min(15, 5 + 3));
+      p.rep += 8;
+      if (law.behavior === 'brutal') p.rep += 3;
+      p.closeCallCount++;
+      effects.push({ type: 'shake' });
+
+      if (newCount <= 0) {
+        // All cops down
+        p.eventLog = [...p.eventLog, { day: p.day, message: `${law.forceEmoji} Took down all ${law.forceName}!`, type: 'danger' }];
+        p.cops = null;
+        if (p.hp <= 0) return { player: p, phase: 'end', effects };
+        return { player: p, phase: 'playing', effects };
+      } else {
+        // Cops remain — stay in combat
+        const lastResult = `Took down 1 officer! ${newCount} remaining.`;
+        p.cops = { ...c, count: newCount, lastResult, roundsCompleted: roundNum };
+        p.eventLog = [...p.eventLog, { day: p.day, message: `${law.forceEmoji} Took down 1 ${law.forceName}! ${newCount} left.`, type: 'danger' }];
+        if (p.hp <= 0) return { player: p, phase: 'end', effects };
+        return { player: p, phase: 'cop', effects };
+      }
+    } else {
+      // Took damage
+      let dm = R(dmMin, dmMax);
+      dm = Math.round(dm * (1 - cMods.fightDamageReduction));
+      p.hp -= dm;
+      p.heat = Math.min(HEAT_CAP, p.heat + 5);
+      p.closeCallCount++;
+      effects.push({ type: 'shake' });
+
+      const lastResult = `Took ${dm} damage! ${c.count} officer${c.count > 1 ? 's' : ''} still standing.`;
+      p.cops = { ...c, lastResult, roundsCompleted: roundNum };
+      p.eventLog = [...p.eventLog, { day: p.day, message: `${law.forceEmoji} ${law.forceName} hit you for ${dm} damage!${dm > 20 ? ' Hurt bad.' : ''}`, type: 'danger' }];
+      if (p.hp <= 0) return { player: p, phase: 'end', effects };
+      return { player: p, phase: 'cop', effects };
     }
-    dm = Math.round(dm * (1 - cMods.fightDamageReduction));
-    p.hp -= dm;
-    // Rebalanced: 5 + kills * 3, capped at 15
-    p.heat = Math.min(HEAT_CAP, p.heat + Math.min(15, 5 + kl * 3));
-    p.rep += kl * 8;
-    // Brutal: bonus rep for winning fights
-    if (law.behavior === 'brutal' && kl > 0) p.rep += kl * 3;
-    p.closeCallCount++;
-    effects.push({ type: 'shake' });
-    p.eventLog = [...p.eventLog, { day: p.day, message: `${law.forceEmoji} Shootout with ${law.forceName}! ${kl}/${c.count} down.${dm > 20 ? ' Hurt bad.' : ''}`, type: 'danger' }];
   } else {
     // Bribe (persona modifier on cost)
     const amt = Math.round(c.bribeCost * c.count * cMods.bribeCostMultiplier);
@@ -1753,26 +1778,27 @@ export function declareGangWar(player: PlayerState, campaign: CampaignState, gan
   return { player: p, campaign: c, effects };
 }
 
-export function gangWarBattleAction(player: PlayerState, campaign: CampaignState, action: 'fight' | 'retreat' | 'negotiate'): { player: PlayerState; campaign: CampaignState; phase: 'playing' | 'end'; effects: SideEffect[] } {
+export function gangWarBattleAction(player: PlayerState, campaign: CampaignState, action: 'fight' | 'retreat' | 'negotiate'): { player: PlayerState; campaign: CampaignState; phase: 'playing' | 'cop' | 'end'; effects: SideEffect[] } {
   const effects: SideEffect[] = [{ type: 'sfx', sound: 'bad' }, { type: 'haptic', style: 'heavy' }];
   const p = { ...player };
   const c = { ...campaign, gangWar: { ...campaign.gangWar, activeWar: campaign.gangWar.activeWar ? { ...campaign.gangWar.activeWar } : null } };
   const war = c.gangWar.activeWar;
-  if (!war) return { player: p, campaign: c, phase: 'playing', effects };
+  if (!war) { p.cops = null; return { player: p, campaign: c, phase: 'playing', effects }; }
 
   const gang = GANGS.find(g => g.id === war.targetGangId);
   const gangName = gang?.name || 'The gang';
+  const battle = p.cops?.gangWarBattle;
+  const roundNum = (p.cops?.roundsCompleted || 0) + 1;
 
   if (action === 'fight') {
     const winChance = p.gun ? 0.35 : 0.15;
     if (C(winChance)) {
-      // Win
+      // Win round
       const dmg = R(15, 25);
       war.gangStrength = Math.max(0, war.gangStrength - dmg);
       war.battlesWon++;
       p.rep += 5;
       p.heat = Math.min(HEAT_CAP, p.heat + 8);
-      p.eventLog = [...p.eventLog, { day: p.day, message: `Won battle vs ${gangName}! Their strength: ${war.gangStrength}`, type: 'gangWar' as const }];
       effects.push({ type: 'haptic', style: 'success' });
 
       // Check gang defeat
@@ -1783,16 +1809,39 @@ export function gangWarBattleAction(player: PlayerState, campaign: CampaignState
         p.cash += 5000;
         p.eventLog = [...p.eventLog, { day: p.day, message: `${gangName} DEFEATED! +$5K bonus, +15 rep`, type: 'gangWar' as const }];
         effects.push({ type: 'sfx', sound: 'level' });
+        p.cops = null;
+        return { player: p, campaign: c, phase: 'playing', effects };
+      } else {
+        // Gang still alive — stay in combat
+        const lastResult = `Hit ${gangName}! Strength down to ${war.gangStrength}%.`;
+        p.eventLog = [...p.eventLog, { day: p.day, message: `Won round vs ${gangName}! Their strength: ${war.gangStrength}%`, type: 'gangWar' as const }];
+        p.cops = p.cops ? {
+          ...p.cops,
+          gangWarBattle: { ...p.cops.gangWarBattle!, enemyStrength: war.gangStrength },
+          lastResult,
+          roundsCompleted: roundNum,
+        } : null;
+        if (p.hp <= 0) return { player: p, campaign: c, phase: 'end', effects };
+        return { player: p, campaign: c, phase: 'cop', effects };
       }
     } else {
-      // Lose
+      // Lose round — take damage but stay in combat
       war.battlesLost++;
       const hpLoss = R(10, 25);
       p.hp -= hpLoss;
       const cashLoss = Math.round(p.cash * 0.20);
       p.cash -= cashLoss;
-      p.eventLog = [...p.eventLog, { day: p.day, message: `Lost battle vs ${gangName}! -${hpLoss}HP, -${$(cashLoss)}`, type: 'gangWar' as const }];
+      const lastResult = `Took ${hpLoss} damage and lost ${$(cashLoss)}!`;
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Lost round vs ${gangName}! -${hpLoss}HP, -${$(cashLoss)}`, type: 'gangWar' as const }];
       effects.push({ type: 'shake' });
+      p.cops = p.cops ? {
+        ...p.cops,
+        gangWarBattle: { ...p.cops.gangWarBattle!, enemyStrength: war.gangStrength },
+        lastResult,
+        roundsCompleted: roundNum,
+      } : null;
+      if (p.hp <= 0) return { player: p, campaign: c, phase: 'end', effects };
+      return { player: p, campaign: c, phase: 'cop', effects };
     }
   } else if (action === 'retreat') {
     if (C(0.40)) {
@@ -1805,22 +1854,22 @@ export function gangWarBattleAction(player: PlayerState, campaign: CampaignState
       p.eventLog = [...p.eventLog, { day: p.day, message: `Failed retreat! -15HP, -${$(cashLoss)}`, type: 'gangWar' as const }];
       effects.push({ type: 'shake' });
     }
+    p.cops = null;
+    if (p.hp <= 0) return { player: p, campaign: c, phase: 'end', effects };
+    return { player: p, campaign: c, phase: 'playing', effects };
   } else {
-    // Negotiate — ceasefire for 3 turns (pay 1.5x base bribe)
+    // Negotiate — ceasefire (pay cost, end encounter)
     const cost = R(2000, 5000);
     if (p.cash >= cost) {
       p.cash -= cost;
-      // We mark gangStrength temporarily to track ceasefire — use a simple approach: set playerStrength to a negative ceasefire counter
-      // Actually, simpler: just remove the war temporarily for 3 turns isn't clean. Let's just accept the cost.
       p.eventLog = [...p.eventLog, { day: p.day, message: `Paid ${$(cost)} ceasefire with ${gangName}. 3 turns peace.`, type: 'gangWar' as const }];
     } else {
       p.eventLog = [...p.eventLog, { day: p.day, message: `Can't afford ceasefire!`, type: 'gangWar' as const }];
     }
+    p.cops = null;
+    if (p.hp <= 0) return { player: p, campaign: c, phase: 'end', effects };
+    return { player: p, campaign: c, phase: 'playing', effects };
   }
-
-  p.cops = null;
-  if (p.hp <= 0) return { player: p, campaign: c, phase: 'end', effects };
-  return { player: p, campaign: c, phase: 'playing', effects };
 }
 
 export function checkGangWarEncounter(player: PlayerState, campaign: CampaignState): boolean {

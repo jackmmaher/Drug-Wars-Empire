@@ -10,9 +10,9 @@ import { MapTab } from './MapTab';
 import { IntelTab } from './IntelTab';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'market', label: 'Market' },
-  { id: 'map', label: 'Travel' },
-  { id: 'intel', label: 'Intel' },
+  { id: 'market', label: '\uD83D\uDC8A Market' },
+  { id: 'map', label: '\u2708\uFE0F Travel' },
+  { id: 'intel', label: '\uD83D\uDD0D Intel' },
 ];
 
 export function GameScreen() {
@@ -101,7 +101,7 @@ export function GameScreen() {
 
         {/* Tab bar */}
         <View style={{
-          flexDirection: 'row', marginHorizontal: 8, marginVertical: 6,
+          flexDirection: 'row', marginHorizontal: 8, marginVertical: 3,
           backgroundColor: colors.bgCard, borderRadius: 8, padding: 3,
         }}>
           {TABS.map(t => (
@@ -109,13 +109,13 @@ export function GameScreen() {
               key={t.id}
               onPress={() => setTab(t.id)}
               style={[
-                { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
+                { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
                 activeTab === t.id && { backgroundColor: colors.bgCardHover },
               ]}
               activeOpacity={0.7}
             >
               <Text style={[
-                { fontSize: 14, fontWeight: '700', color: colors.textDark, textTransform: 'uppercase', letterSpacing: 1 },
+                { fontSize: 13, fontWeight: '700', color: colors.textDark, textTransform: 'uppercase', letterSpacing: 1 },
                 activeTab === t.id && { color: colors.text },
               ]}>
                 {t.label}

@@ -5,6 +5,38 @@ import { $, DRUGS, GANGS, getRegionForLocation, DEFAULT_LAW, getPersonaModifiers
 import { inventoryCount } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
+function ResultBanner({ lastResult, roundsCompleted, colors }: { lastResult?: string; roundsCompleted?: number; colors: any }) {
+  if (!lastResult) return null;
+
+  // Determine if positive or negative result
+  const isPositive = lastResult.toLowerCase().includes('took down') || lastResult.toLowerCase().includes('hit ') || lastResult.toLowerCase().includes('strength down');
+  const bgColor = isPositive ? colors.bgSuccess : colors.bgDanger;
+  const textColor = isPositive ? colors.green : colors.red;
+  const borderColor = isPositive ? colors.greenDark : colors.red;
+
+  return (
+    <View style={{
+      backgroundColor: bgColor,
+      borderRadius: 8,
+      borderLeftWidth: 3,
+      borderLeftColor: borderColor,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      marginBottom: 12,
+      width: 320,
+    }}>
+      {roundsCompleted != null && roundsCompleted > 0 && (
+        <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '700', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 1 }}>
+          Round {roundsCompleted}
+        </Text>
+      )}
+      <Text style={{ color: textColor, fontSize: 14, fontWeight: '700' }}>
+        {lastResult}
+      </Text>
+    </View>
+  );
+}
+
 function ThreatMeter({ count, colors }: { count: number; colors: any }) {
   const maxDots = 5;
   const level = Math.min(count, maxDots);
@@ -80,9 +112,11 @@ export function CopScreen() {
           <Text style={{ color: colors.textMuted, fontSize: 14, fontStyle: 'italic', marginBottom: 4 }}>
             Enemy strength: {battle.enemyStrength}%
           </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 15, marginBottom: 20 }}>
+          <Text style={{ color: colors.textMuted, fontSize: 15, marginBottom: 12 }}>
             Cash: {$(cp.cash)} {'\u2022'} HP: {cp.hp}
           </Text>
+
+          <ResultBanner lastResult={cops.lastResult} roundsCompleted={cops.roundsCompleted} colors={colors} />
 
           <ThreatMeter count={Math.ceil(battle.enemyStrength / 20)} colors={colors} />
 
@@ -93,7 +127,7 @@ export function CopScreen() {
                   {cp.gun ? 'FIGHT (armed)' : 'FIGHT (fists)'} <Text style={{ opacity: 0.7 }}>{fightChance}% win</Text>
                 </Text>
               </TouchableOpacity>
-              <Text style={subtitleStyle}>Win: weaken their grip. Lose: take damage, forced retreat.</Text>
+              <Text style={subtitleStyle}>Win: weaken their grip. Lose: take damage, lose cash.</Text>
             </View>
             <View>
               <TouchableOpacity style={[actionBtn, { backgroundColor: colors.blue }]} onPress={() => copAct('run')} activeOpacity={0.8}>
@@ -293,6 +327,8 @@ export function CopScreen() {
             {$(inventoryValue)} worth of drugs at risk
           </Text>
         )}
+
+        <ResultBanner lastResult={cops.lastResult} roundsCompleted={cops.roundsCompleted} colors={colors} />
 
         <ThreatMeter count={cops.count} colors={colors} />
 

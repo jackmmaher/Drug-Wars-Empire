@@ -50,15 +50,15 @@ export function TradeModal() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
       <View style={{ alignItems: 'center', paddingHorizontal: 24, maxWidth: 600, width: '100%' }}>
-        <Text style={{ fontSize: 48 }}>{drug.emoji}</Text>
-        <Text style={{ color: colors.white, fontSize: 24, fontWeight: '900', marginTop: 6, marginBottom: 4 }}>
+        <Text style={{ fontSize: 36 }}>{drug.emoji}</Text>
+        <Text style={{ color: colors.white, fontSize: 20, fontWeight: '900', marginTop: 4, marginBottom: 2 }}>
           {isBuy ? 'BUY' : 'SELL'} {drug.name}
         </Text>
-        <Text style={{ color: colors.textDim, fontSize: 16 }}>{$(price)} each</Text>
+        <Text style={{ color: colors.textDim, fontSize: 15 }}>{$(price)} each</Text>
 
         {!isBuy && avg ? (
-          <View style={{ alignItems: 'center', marginVertical: 6 }}>
-            <Text style={{ fontSize: 26, fontWeight: '900', color: pnlPct > 0 ? colors.green : colors.red }}>
+          <View style={{ alignItems: 'center', marginVertical: 4 }}>
+            <Text style={{ fontSize: 22, fontWeight: '900', color: pnlPct > 0 ? colors.green : colors.red }}>
               {pnlPct > 0 ? '+' : ''}{pnlPct.toFixed(0)}%
             </Text>
             {pnlPct < 0 && (
@@ -69,7 +69,7 @@ export function TradeModal() {
           </View>
         ) : null}
 
-        <Text style={{ color: colors.textMuted, fontSize: 15, marginBottom: 14 }}>
+        <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 10 }}>
           {isBuy ? `Max ${maxBuy}` : `Own ${own}`}
           {cp.streak > 1 && !isBuy ? ` \u2022 ${cp.streak}x streak` : ''}
         </Text>
@@ -88,41 +88,41 @@ export function TradeModal() {
           autoFocus
         />
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 12, justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginVertical: 10, justifyContent: 'center' }}>
           {quickAmounts.map(n => (
             <TouchableOpacity key={n} style={{
               backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder,
-              borderRadius: 5, paddingVertical: 8, paddingHorizontal: 14,
+              borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10,
             }} onPress={() => setTradeQuantity(String(n))}>
-              <Text style={{ color: colors.textDim, fontSize: 14, fontWeight: '600' }}>{n}</Text>
+              <Text style={{ color: colors.textDim, fontSize: 13, fontWeight: '600' }}>{n}</Text>
             </TouchableOpacity>
           ))}
           {pctButtons.map(btn => (
             <TouchableOpacity key={btn.label} style={{
               backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder,
-              borderRadius: 5, paddingVertical: 8, paddingHorizontal: 14,
+              borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10,
             }} onPress={() => setTradeQuantity(String(btn.value))}>
-              <Text style={{ color: colors.textDim, fontSize: 14, fontWeight: '600' }}>{btn.label}</Text>
+              <Text style={{ color: colors.textDim, fontSize: 13, fontWeight: '600' }}>{btn.label}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity style={{
-            backgroundColor: colors.green, borderRadius: 5, paddingVertical: 8, paddingHorizontal: 14,
+            backgroundColor: colors.green, borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10,
           }} onPress={() => setTradeQuantity('max')}>
-            <Text style={{ color: '#000', fontSize: 14, fontWeight: '800' }}>MAX</Text>
+            <Text style={{ color: '#000', fontSize: 13, fontWeight: '800' }}>MAX</Text>
           </TouchableOpacity>
         </View>
 
         {q > 0 && (
-          <View style={{ alignItems: 'center', marginVertical: 12 }}>
-            <Text style={{ fontSize: 18, fontWeight: '800', color: colors.white, marginBottom: 4 }}>
+          <View style={{ alignItems: 'center', marginVertical: 8 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.white, marginBottom: 3 }}>
               {isBuy ? 'Cost' : 'Revenue'}: {$(total)}
             </Text>
             {!isBuy && pnl !== 0 && (
-              <Text style={{ fontSize: 16, fontWeight: '700', color: pnl > 0 ? colors.green : colors.red }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: pnl > 0 ? colors.green : colors.red }}>
                 Profit: {pnl > 0 ? '+' : ''}{$(pnl)} ({pnlPct > 0 ? '+' : ''}{pnlPct.toFixed(0)}%)
               </Text>
             )}
-            <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 4 }}>
+            <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 3 }}>
               Space after: {spaceAfter}/{maxSpace}
             </Text>
           </View>

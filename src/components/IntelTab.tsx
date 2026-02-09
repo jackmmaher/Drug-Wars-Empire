@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled } from '../constants/game';
+import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled, LEVEL_CONFIGS } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
 
@@ -19,6 +19,24 @@ function getFavorPerks(tier: number): string[] {
   if (tier >= 2) perks.push('-5% cop encounters', '+$3K loan cap');
   if (tier >= 3) perks.push('No mugging on turf', '+10% sell price');
   return perks;
+}
+
+function getNextFavorMilestone(rel: number): { needed: number; tierName: string; perk: string } | null {
+  if (rel < FAVOR_FRIENDLY) return { needed: FAVOR_FRIENDLY - rel, tierName: 'Friendly', perk: '10% off consignment' };
+  if (rel < FAVOR_TRUSTED) return { needed: FAVOR_TRUSTED - rel, tierName: 'Trusted', perk: '-5% cops, +$3K loans' };
+  if (rel < FAVOR_BLOOD) return { needed: FAVOR_BLOOD - rel, tierName: 'Blood Brother', perk: 'no mugging, +10% sell' };
+  return null;
+}
+
+function getGangStatusLine(rel: number, gangId: string, playerLocation: string, gangTurf: string[], hasConsignment: boolean, consignmentGangId?: string, atWar?: boolean): string {
+  if (atWar) return 'At war! Travel to their turf for battle.';
+  if (hasConsignment && consignmentGangId === gangId) return 'You owe them consignment -- pay up!';
+  if (rel < -5) return 'Hostile -- stay off their turf.';
+  if (gangTurf.includes(playerLocation) && rel >= 0) return 'You\'re on their turf. Trading here builds favor.';
+  if (rel >= FAVOR_BLOOD) return 'Blood brothers. Full protection on their turf.';
+  if (rel >= FAVOR_TRUSTED) return 'Trusted ally. Good perks on their turf.';
+  if (rel >= FAVOR_FRIENDLY) return 'Friendly terms. Keep trading to build trust.';
+  return 'Neutral. Trade on their turf to build relations.';
 }
 
 function Section({ title, count, defaultOpen = false, children }: { title: string; count?: number; defaultOpen?: boolean; children: React.ReactNode }) {
@@ -67,6 +85,21 @@ function getLogPrefix(type: string): string {
   }
 }
 
+function getLogColor(type: string, colors: any): string {
+  switch (type) {
+    case 'danger': return colors.redLight;
+    case 'spike': return colors.pinkLight;
+    case 'crash': return colors.greenLight;
+    case 'tip': return colors.purpleLight;
+    case 'customs': return colors.orangeLight;
+    case 'gangLoan': return '#fbbf24';
+    case 'mission': return colors.indigoLight;
+    case 'gangWar': return colors.red;
+    case 'levelUp': return colors.yellow;
+    default: return colors.textMuted;
+  }
+}
+
 export function IntelTab() {
   const { colors } = useTheme();
   const cp = useGameStore(s => s.player);
@@ -83,6 +116,8 @@ export function IntelTab() {
 
   const pendingTip = cp.rat.pendingTip;
   const tipDrug = pendingTip ? DRUGS.find(d => d.id === pendingTip.drugId) : null;
+
+  const recentLogs = [...cp.eventLog].reverse().slice(0, 4);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 }}>
@@ -319,7 +354,7 @@ export function IntelTab() {
         )}
       </Section>
 
-      {/* Gangs -- expanded cards */}
+      {/* Gangs -- expanded cards with context */}
       <Section title="GANGS" count={GANGS.length} defaultOpen={false}>
         {GANGS.map(g => {
           const rel = cp.gangRelations[g.id] ?? 0;
@@ -327,6 +362,15 @@ export function IntelTab() {
           const { label, color: favorColor } = getFavorLabel(rel);
           const perks = getFavorPerks(tier);
           const barPercent = Math.max(0, Math.min(100, ((rel + 30) / 55) * 100));
+          const nextMilestone = getNextFavorMilestone(rel);
+          const onTheirTurf = g.turf.includes(cp.location);
+          const isAtWar = campaign.gangWar.activeWar?.targetGangId === g.id;
+          const isDefeated = campaign.gangWar.defeatedGangs.includes(g.id);
+          const statusLine = getGangStatusLine(
+            rel, g.id, cp.location, g.turf,
+            !!cp.consignment, cp.consignment?.gangId,
+            isAtWar,
+          );
 
           return (
             <View key={g.id} style={{
@@ -351,8 +395,40 @@ export function IntelTab() {
               <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
                 <View style={{ height: '100%', width: `${barPercent}%`, backgroundColor: favorColor, borderRadius: 2 }} />
               </View>
+
+              {/* Status line */}
+              <Text style={{ fontSize: 12, color: isAtWar ? colors.red : onTheirTurf ? colors.blueLight : colors.textDim, marginBottom: 3, fontStyle: 'italic' }}>
+                {isDefeated ? 'Defeated. Their turf is yours.' : statusLine}
+              </Text>
+
+              {/* Next milestone */}
+              {nextMilestone && !isDefeated && (
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>
+                  +{nextMilestone.needed} rep to {nextMilestone.tierName}: {nextMilestone.perk}
+                </Text>
+              )}
+              {!nextMilestone && !isDefeated && (
+                <Text style={{ fontSize: 11, color: colors.green, marginBottom: 3 }}>Maximum loyalty reached</Text>
+              )}
+
+              {/* On their turf indicator */}
+              {onTheirTurf && !isDefeated && (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3,
+                  backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3, alignSelf: 'flex-start',
+                }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.blueLight }}>You're here</Text>
+                  {consignmentEnabled && rel >= FAVOR_FRIENDLY && !cp.consignment && (
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}> -- consignment available</Text>
+                  )}
+                  {territoryEnabled && !cp.territories[cp.location] && (
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}> -- territory for sale</Text>
+                  )}
+                </View>
+              )}
+
               {perks.length > 0 && (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
                   {perks.map((perk, i) => (
                     <View key={i} style={{
                       backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2,
@@ -373,99 +449,186 @@ export function IntelTab() {
           {campaign.gangWar.activeWar ? (() => {
             const war = campaign.gangWar.activeWar!;
             const warGang = GANGS.find(g => g.id === war.targetGangId);
+            const warGangTurf = warGang?.turf.map(t => LOCATIONS.find(l => l.id === t)?.name || t).join(', ') || '';
+            const onEnemyTurf = warGang?.turf.includes(cp.location) || false;
+            const playerTerritories = Object.keys(cp.territories);
+            const vulnerableTerritories = playerTerritories.filter(t => {
+              const loc = LOCATIONS.find(l => l.id === t);
+              return loc && warGang?.turf.includes(t);
+            });
             return (
               <View style={{
-                backgroundColor: 'rgba(239,68,68,0.06)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.15)',
+                backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)',
                 borderRadius: 8, padding: 10,
               }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.red, marginBottom: 4 }}>
-                  At war with {warGang?.emoji} {warGang?.name}
+                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.red, marginBottom: 6 }}>
+                  At war with {warGang?.emoji} {warGang?.name}!
                 </Text>
                 <Bar label="ENEMY STRENGTH" percent={war.gangStrength} color={colors.red} />
                 <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 4 }}>
                   Battles: {war.battlesWon}W / {war.battlesLost}L
                 </Text>
-                <Text style={{ fontSize: 12, color: colors.textDim, marginTop: 2 }}>
-                  40% encounter on enemy turf, 15% elsewhere
-                </Text>
+
+                {/* Tactical info */}
+                <View style={{
+                  marginTop: 6, backgroundColor: 'rgba(239,68,68,0.06)', borderRadius: 5, padding: 8,
+                }}>
+                  {onEnemyTurf ? (
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.yellow }}>
+                      You're on enemy turf! 40% chance of battle encounter.
+                    </Text>
+                  ) : (
+                    <Text style={{ fontSize: 13, color: colors.textDim }}>
+                      Travel to {warGangTurf} for 40% battle chance (15% elsewhere).
+                    </Text>
+                  )}
+                  <Text style={{ fontSize: 12, color: colors.textDim, marginTop: 3 }}>
+                    Win condition: reduce their strength to 0%.
+                  </Text>
+                  {vulnerableTerritories.length > 0 && (
+                    <Text style={{ fontSize: 12, color: colors.orangeLight, marginTop: 3 }}>
+                      Your territory on their turf could be raided!
+                    </Text>
+                  )}
+                </View>
               </View>
             );
           })() : (
             <View>
+              {/* Defeated gangs */}
               {campaign.gangWar.defeatedGangs.length > 0 && (
-                <Text style={{ fontSize: 13, color: colors.green, marginBottom: 6 }}>
-                  Defeated: {campaign.gangWar.defeatedGangs.map(id => {
+                <View style={{ marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: colors.green, fontWeight: '600', marginBottom: 3 }}>
+                    Defeated ({campaign.gangWar.defeatedGangs.length}):
+                  </Text>
+                  {campaign.gangWar.defeatedGangs.map(id => {
                     const g = GANGS.find(x => x.id === id);
-                    return `${g?.emoji || ''} ${g?.name || id}`;
-                  }).join(', ')}
-                </Text>
+                    return (
+                      <Text key={id} style={{ fontSize: 13, color: colors.greenLight, paddingLeft: 8 }}>
+                        {g?.emoji || ''} {g?.name || id} -- territory claimed
+                      </Text>
+                    );
+                  })}
+                </View>
               )}
-              <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 6 }}>
-                Visit rival gang turf to declare war.
-              </Text>
+
+              {/* Campaign motivation */}
               {(() => {
-                const localGang = GANGS.find(g => g.turf.includes(cp.location));
-                if (!localGang || campaign.gangWar.defeatedGangs.includes(localGang.id)) return null;
-                // Don't show for gangs with high relations
-                if ((cp.gangRelations[localGang.id] ?? 0) > 10) return null;
-                return (
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#7f1d1d', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 14, alignSelf: 'flex-start' }}
-                    onPress={() => declareWar(localGang.id)}
-                  >
-                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
-                      Declare War on {localGang.emoji} {localGang.name}
+                const levelCfg = LEVEL_CONFIGS[cp.campaignLevel];
+                const neededGangs = levelCfg.winCondition.defeatedGangs || 0;
+                const remaining = neededGangs - campaign.gangWar.defeatedGangs.length;
+                if (remaining > 0) {
+                  return (
+                    <Text style={{ fontSize: 13, color: colors.yellow, fontWeight: '600', marginBottom: 6 }}>
+                      Defeat {remaining} more gang{remaining !== 1 ? 's' : ''} for campaign victory.
                     </Text>
-                  </TouchableOpacity>
-                );
+                  );
+                }
+                return null;
               })()}
+
+              {/* Available targets */}
+              <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, fontWeight: '600', marginBottom: 4 }}>AVAILABLE TARGETS</Text>
+              {GANGS.filter(g => !campaign.gangWar.defeatedGangs.includes(g.id)).map(g => {
+                const gRel = cp.gangRelations[g.id] ?? 0;
+                const canDeclare = gRel <= 10;
+                const onTurf = g.turf.includes(cp.location);
+                return (
+                  <View key={g.id} style={{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    paddingVertical: 5, paddingHorizontal: 8, marginBottom: 2,
+                    backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 5,
+                  }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, color: colors.textDim }}>
+                        {g.emoji} {g.name} {onTurf ? '(here)' : ''}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                        Relations: {gRel > 0 ? '+' : ''}{gRel} {!canDeclare ? '(too friendly)' : ''}
+                      </Text>
+                    </View>
+                    {onTurf && canDeclare && (
+                      <TouchableOpacity
+                        style={{ backgroundColor: '#7f1d1d', borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10 }}
+                        onPress={() => declareWar(g.id)}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Declare War</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
             </View>
           )}
         </Section>
       )}
 
-      {/* Milestones */}
+      {/* Milestones -- labeled card grid */}
       <Section title="MILESTONES" count={cp.milestones?.length || 0}>
-        <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-          {MILESTONES.map(m => (
-            <Text
-              key={m.id}
-              style={[
-                { fontSize: 22 },
-                !cp.milestones?.includes(m.id) && { opacity: 0.1 },
-              ]}
-            >
-              {m.emoji}
-            </Text>
-          ))}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {MILESTONES.map(m => {
+            const earned = cp.milestones?.includes(m.id);
+            return (
+              <View
+                key={m.id}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 5,
+                  backgroundColor: earned ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+                  borderWidth: 1,
+                  borderColor: earned ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.05)',
+                  borderRadius: 6,
+                  paddingHorizontal: 8, paddingVertical: 6,
+                  width: '48%' as any,
+                  opacity: earned ? 1 : 0.4,
+                }}
+              >
+                <Text style={{ fontSize: 16 }}>{m.emoji}</Text>
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: earned ? '700' : '500',
+                  color: earned ? colors.greenLight : colors.textDark,
+                  flexShrink: 1,
+                }}>
+                  {m.label}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       </Section>
 
-      {/* Log */}
-      <Section title="LOG" count={cp.eventLog.length} defaultOpen={false}>
-        <View style={{ maxHeight: 180 }}>
-          {[...cp.eventLog].reverse().slice(0, 10).map((e, i) => (
-            <Text key={i} style={[
-              { fontSize: 13, paddingVertical: 2 },
-              {
-                color: e.type === 'danger' ? colors.redLight
-                  : e.type === 'spike' ? colors.pinkLight
-                  : e.type === 'crash' ? colors.greenLight
-                  : e.type === 'tip' ? colors.purpleLight
-                  : e.type === 'customs' ? colors.orangeLight
-                  : e.type === 'gangLoan' ? '#fbbf24'
-                  : e.type === 'mission' ? colors.indigoLight
-                  : e.type === 'gangWar' ? colors.red
-                  : e.type === 'levelUp' ? colors.yellow
-                  : colors.textMuted,
-                opacity: 1 - i * 0.06,
-              },
-            ]}>
+      {/* Recent events -- always visible */}
+      {recentLogs.length > 0 && (
+        <View style={{ marginTop: 12 }}>
+          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, fontWeight: '600', marginBottom: 4 }}>RECENT EVENTS</Text>
+          {recentLogs.map((e, i) => (
+            <Text key={i} style={{
+              fontSize: 13, paddingVertical: 2,
+              color: getLogColor(e.type, colors),
+              opacity: 1 - i * 0.1,
+            }}>
               <Text style={{ color: colors.textDarkest }}>D{e.day}</Text> {getLogPrefix(e.type)}{e.message}
             </Text>
           ))}
         </View>
-      </Section>
+      )}
+
+      {/* Full Log -- collapsible for older entries */}
+      {cp.eventLog.length > 4 && (
+        <Section title="FULL LOG" count={cp.eventLog.length} defaultOpen={false}>
+          <View style={{ maxHeight: 180 }}>
+            {[...cp.eventLog].reverse().slice(4, 14).map((e, i) => (
+              <Text key={i} style={{
+                fontSize: 13, paddingVertical: 2,
+                color: getLogColor(e.type, colors),
+                opacity: 1 - i * 0.06,
+              }}>
+                <Text style={{ color: colors.textDarkest }}>D{e.day}</Text> {getLogPrefix(e.type)}{e.message}
+              </Text>
+            ))}
+          </View>
+        </Section>
+      )}
     </ScrollView>
   );
 }

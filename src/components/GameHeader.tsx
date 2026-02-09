@@ -36,24 +36,22 @@ export function GameHeader() {
   return (
     <View>
       {/* Header */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <View>
-            <Text style={{ fontSize: 13, color: colors.textDark, letterSpacing: 2, fontWeight: '600' }}>
-              {gameMode === 'campaign' && <Text style={{ color: colors.yellow, fontWeight: '800' }}>L{campaign.level} </Text>}
-              DAY {Math.min(cp.day, daysLimit)}/{daysLimit}
-            </Text>
-            <Text style={{ fontSize: 28, fontWeight: '900', color: colors.white, lineHeight: 34 }}>{$(cp.cash)}</Text>
-            <Text style={{ fontSize: 11, color: colors.textDark }}>Cash on hand</Text>
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <Text style={{ fontSize: 24, fontWeight: '900', color: colors.white }}>{$(cp.cash)}</Text>
+            {cp.streak > 1 && (
+              <Text style={{ fontSize: 11, fontWeight: '800', color: colors.yellow }}>({cp.streak}x)</Text>
+            )}
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 13, color: colors.textMuted }}>{rank.emoji} {rank.name.toUpperCase()}</Text>
-            <Text style={{ fontSize: 20, fontWeight: '800', color: nw > 0 ? colors.green : colors.red }}>{$(nw)}</Text>
-            <Text style={{ fontSize: 11, color: colors.textDark }}>Net worth</Text>
-          </View>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: nw > 0 ? colors.green : colors.red }}>{$(nw)}</Text>
+          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, fontWeight: '600' }}>
+            {gameMode === 'campaign' && <Text style={{ color: colors.yellow, fontWeight: '800' }}>L{campaign.level} </Text>}
+            D{Math.min(cp.day, daysLimit)}/{daysLimit}
+          </Text>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 4, marginVertical: 5 }}>
           <MiniStat label="DEBT" value={$(cp.debt)} color={cp.debt > STARTING_DEBT * 2 ? colors.red : cp.debt > 0 ? colors.orange : colors.green} />
           <MiniStat label="BANK" value={$(cp.bank)} color={colors.blue} />
           <MiniStat label="SPACE" value={`${free}/${espce}`} color={free < 15 ? colors.yellow : colors.textMuted} />
@@ -61,26 +59,26 @@ export function GameHeader() {
         </View>
 
         {cp.debt > STARTING_DEBT * 3 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.red }}>{'\u26A0'} Debt compounding!</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.red }}>{'\u26A0'} Debt compounding!</Text>
             {cp.day < daysLimit && (
-              <Text style={{ fontSize: 13, color: colors.textMuted }}>{'\u2192'} ~{$(Math.round(cp.debt * Math.pow(1 + DEBT_INTEREST, daysLimit - cp.day)))} by D{daysLimit}</Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted }}>{'\u2192'} ~{$(Math.round(cp.debt * Math.pow(1 + DEBT_INTEREST, daysLimit - cp.day)))} by D{daysLimit}</Text>
             )}
           </View>
         )}
 
-        <Bar label="HEAT" percent={cp.heat} color={cp.heat < 30 ? colors.green : cp.heat < 60 ? colors.yellow : colors.red} />
-        <Bar label="HP" percent={cp.hp} color={cp.hp > 60 ? colors.green : cp.hp > 30 ? colors.yellow : colors.red} />
-
-        {cp.streak > 1 && (
-          <Text style={{ textAlign: 'center', fontSize: 14, color: colors.yellow, fontWeight: '700', marginVertical: 3 }}>
-            {cp.streak}x STREAK {cp.combo > 1.5 ? '-- rep bonus!' : ''}
-          </Text>
-        )}
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          <View style={{ flex: 1 }}>
+            <Bar percent={cp.heat} color={cp.heat < 30 ? colors.green : cp.heat < 60 ? colors.yellow : colors.red} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Bar percent={cp.hp} color={cp.hp > 60 ? colors.green : cp.hp > 30 ? colors.yellow : colors.red} />
+          </View>
+        </View>
 
         {cp.newMilestone && (
-          <Text style={{ textAlign: 'center', fontSize: 15, color: colors.yellow, fontWeight: '800' }}>
-            MILESTONE: {cp.newMilestone.emoji} {cp.newMilestone.label}!
+          <Text style={{ textAlign: 'center', fontSize: 13, color: colors.yellow, fontWeight: '800' }}>
+            {cp.newMilestone.emoji} {cp.newMilestone.label}!
           </Text>
         )}
 
@@ -99,15 +97,14 @@ export function GameHeader() {
       </View>
 
       {/* Location */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 16 }}>
-        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: loc?.color }} />
-        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text, flex: 1 }} numberOfLines={1}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 16 }}>
+        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, flex: 1 }} numberOfLines={1}>
           {isAbroad ? `${region.emoji} ${region.name} > ` : ''}{loc?.emoji} {loc?.name}
         </Text>
         {cp.territories[cp.location] && (
           <Text style={{ fontSize: 12, color: colors.green, fontWeight: '600' }}>+{$(cp.territories[cp.location].tribute)}/d</Text>
         )}
-        <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
           {persona && (
             <StatusIcon icon={persona.emoji} value="" label={persona.name.split(' ').pop() || ''} color={colors.textDim} />
           )}
@@ -154,13 +151,13 @@ export function GameHeader() {
       {cp.consignment && conGang && (
         <View style={[
           {
-            marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+            marginHorizontal: 12, marginBottom: 3, paddingVertical: 5, paddingHorizontal: 10,
             borderRadius: 6, backgroundColor: 'rgba(234,179,8,0.06)', borderWidth: 1, borderColor: 'rgba(234,179,8,0.15)',
           },
           cp.consignment.turnsLeft <= 1 && { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' },
         ]}>
           <Text style={{
-            fontSize: 14, fontWeight: '600',
+            fontSize: 13, fontWeight: '600',
             color: cp.consignment.turnsLeft <= 1 ? colors.red : colors.yellow,
           }}>
             Owe {conGang.name} {$(cp.consignment.amountOwed - cp.consignment.amountPaid)} {'\u2022'} {cp.consignment.turnsLeft > 0 ? `${cp.consignment.turnsLeft} turn${cp.consignment.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'} {'\u2022'} Return to {conLoc?.name || '???'}
@@ -172,13 +169,13 @@ export function GameHeader() {
       {cp.gangLoan && loanGang && (
         <View style={[
           {
-            marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+            marginHorizontal: 12, marginBottom: 3, paddingVertical: 5, paddingHorizontal: 10,
             borderRadius: 6, backgroundColor: 'rgba(234,179,8,0.06)', borderWidth: 1, borderColor: 'rgba(234,179,8,0.15)',
           },
           cp.gangLoan.turnsLeft <= 1 && { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' },
         ]}>
           <Text style={{
-            fontSize: 14, fontWeight: '600',
+            fontSize: 13, fontWeight: '600',
             color: cp.gangLoan.turnsLeft <= 1 ? colors.red : '#fbbf24',
           }}>
             {loanGang.emoji} Loan: {$(cp.gangLoan.amountOwed - cp.gangLoan.amountPaid)} {'\u2022'} {cp.gangLoan.turnsLeft > 0 ? `${cp.gangLoan.turnsLeft} turn${cp.gangLoan.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'} {'\u2022'} 15%/turn
@@ -189,10 +186,10 @@ export function GameHeader() {
       {/* Mission status bar */}
       {cp.gangMission && missionGang && (
         <View style={{
-          marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+          marginHorizontal: 12, marginBottom: 3, paddingVertical: 5, paddingHorizontal: 10,
           borderRadius: 6, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)',
         }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.indigoLight }}>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: colors.indigoLight }}>
             {missionGang.emoji} Mission: {cp.gangMission.description} {'\u2022'} {cp.gangMission.turnsLeft} turn{cp.gangMission.turnsLeft !== 1 ? 's' : ''}
           </Text>
         </View>
@@ -256,7 +253,7 @@ export function GameHeader() {
       {cp.currentEvent && (
         <View style={[
           {
-            marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+            marginHorizontal: 12, marginBottom: 3, paddingVertical: 5, paddingHorizontal: 10,
             borderRadius: 6, borderWidth: 1,
           },
           cp.currentEvent.type === 'spike'
@@ -264,7 +261,7 @@ export function GameHeader() {
             : { backgroundColor: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.15)' },
         ]}>
           <Text style={{
-            fontSize: 14, fontWeight: '600',
+            fontSize: 13, fontWeight: '600',
             color: cp.currentEvent.type === 'spike' ? colors.redLight : colors.greenLight,
           }}>
             {cp.currentEvent.type === 'spike' ? '\uD83D\uDCC8' : '\uD83D\uDCC9'}{' '}
@@ -277,10 +274,10 @@ export function GameHeader() {
       {/* Near miss */}
       {cp.nearMisses.length > 0 && (
         <View style={{
-          marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+          marginHorizontal: 12, marginBottom: 3, paddingVertical: 5, paddingHorizontal: 10,
           borderRadius: 6, backgroundColor: 'rgba(249,115,22,0.06)', borderWidth: 1, borderColor: 'rgba(249,115,22,0.15)',
         }}>
-          <Text style={{ fontSize: 14, color: colors.orangeLight }}>
+          <Text style={{ fontSize: 13, color: colors.orangeLight }}>
             <Text style={{ fontWeight: '700' }}>{cp.nearMisses[0].type === 'sold_early' ? 'Sold too early!' : 'Near miss!'}</Text>{' '}
             {cp.nearMisses[0].drug.emoji} {cp.nearMisses[0].drug.name} {cp.nearMisses[0].type === 'sold_early' ? 'jumped to' : 'spiked to'} {$(cp.nearMisses[0].currentPrice)} -- {cp.nearMisses[0].type === 'sold_early' ? 'you just sold' : 'you had'} {cp.nearMisses[0].quantity}! Missed {$(cp.nearMisses[0].missedProfit)}!
           </Text>
@@ -320,28 +317,28 @@ function MilestoneBar({ level, player, campaign, colors }: {
     <View style={{
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 6,
-      marginTop: 6,
-      paddingVertical: 4,
+      gap: 4,
+      marginTop: 4,
+      paddingVertical: 2,
       paddingHorizontal: 2,
     }}>
       {objectives.map((obj, i) => (
         <View key={i} style={{
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 3,
+          gap: 2,
           backgroundColor: obj.done ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.03)',
           borderRadius: 4,
-          paddingHorizontal: 6,
+          paddingHorizontal: 5,
           paddingVertical: 2,
           borderWidth: 1,
           borderColor: obj.done ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)',
         }}>
-          <Text style={{ fontSize: 11, color: obj.done ? colors.green : colors.textDark }}>
+          <Text style={{ fontSize: 10, color: obj.done ? colors.green : colors.textDark }}>
             {obj.done ? '\u2713' : '\u2717'}
           </Text>
           <Text style={{
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: '600',
             color: obj.done ? colors.green : colors.textDark,
           }}>
@@ -405,10 +402,10 @@ function OfferBanner() {
 
   return (
     <View style={{
-      marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+      marginHorizontal: 12, marginBottom: 3, paddingVertical: 5, paddingHorizontal: 10,
       borderRadius: 6, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)',
     }}>
-      <Text style={{ fontSize: 15, color: colors.indigoLight, fontWeight: '600', marginBottom: 4 }}>{offerText}</Text>
+      <Text style={{ fontSize: 13, color: colors.indigoLight, fontWeight: '600', marginBottom: 3 }}>{offerText}</Text>
       {returnCostWarning}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TouchableOpacity onPress={acceptOffer} disabled={!isFree && cp.cash < offerCost} style={{
