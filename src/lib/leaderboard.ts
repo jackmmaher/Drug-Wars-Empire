@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabase } from './supabase';
 
 export interface ScoreEntry {
   id: number;
@@ -19,6 +19,7 @@ export interface ScoreEntry {
 
 export async function submitScore(entry: Omit<ScoreEntry, 'id' | 'played_at'>): Promise<boolean> {
   try {
+    const supabase = getSupabase();
     if (!supabase) return false;
     const { error } = await supabase.from('scores').insert(entry);
     if (error) { console.warn('Score submit failed:', error.message); return false; }
@@ -28,6 +29,7 @@ export async function submitScore(entry: Omit<ScoreEntry, 'id' | 'played_at'>): 
 
 export async function fetchLeaderboard(limit = 20): Promise<ScoreEntry[]> {
   try {
+    const supabase = getSupabase();
     if (!supabase) return [];
     const { data, error } = await supabase
       .from('scores')
@@ -41,6 +43,7 @@ export async function fetchLeaderboard(limit = 20): Promise<ScoreEntry[]> {
 
 export async function fetchRecentScores(limit = 10): Promise<ScoreEntry[]> {
   try {
+    const supabase = getSupabase();
     if (!supabase) return [];
     const { data, error } = await supabase
       .from('scores')

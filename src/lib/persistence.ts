@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase, isSupabaseConfigured, getSession } from './supabase';
+import { getSupabase, isSupabaseConfigured, getSession } from './supabase';
 import type { PlayerState } from '../types/game';
 
 const LOCAL_SAVE_KEY = 'drugwars_save';
@@ -34,6 +34,7 @@ export async function clearLocal(): Promise<void> {
 
 // ── Cloud Save/Load (Supabase — subscribers) ───────────────
 export async function saveToCloud(state: PlayerState): Promise<void> {
+  const supabase = getSupabase();
   if (!isSupabaseConfigured() || !supabase) return;
   const session = await getSession();
   if (!session?.user) return;
@@ -52,6 +53,7 @@ export async function saveToCloud(state: PlayerState): Promise<void> {
 }
 
 export async function loadFromCloud(): Promise<PlayerState | null> {
+  const supabase = getSupabase();
   if (!isSupabaseConfigured() || !supabase) return null;
   const session = await getSession();
   if (!session?.user) return null;
