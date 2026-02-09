@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, type ScrollView as ScrollViewType } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { PERSONAS } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
@@ -16,6 +16,9 @@ export function TitleScreen() {
   const setGameMode = useGameStore(s => s.setGameMode);
   const [difficulty, setDifficulty] = React.useState<'conservative' | 'standard' | 'highroller'>('standard');
   const canPlay = playerName.trim().length > 0;
+  const scrollRef = useRef<ScrollViewType>(null);
+  const [scrollPos, setScrollPos] = React.useState(0);
+  const cardWidth = 98; // 90 card + 8 gap
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
@@ -82,11 +85,30 @@ export function TitleScreen() {
         <Text style={{ fontSize: 10, letterSpacing: 3, color: colors.textMuted, textTransform: 'uppercase', marginBottom: 6 }}>
           CHOOSE YOUR PERSONA
         </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, maxWidth: '100%' }}>
+          <TouchableOpacity
+            onPress={() => {
+              const newPos = Math.max(0, scrollPos - cardWidth * 2);
+              scrollRef.current?.scrollTo({ x: newPos, animated: true });
+              setScrollPos(newPos);
+            }}
+            style={{
+              width: 28, height: 28, borderRadius: 14,
+              backgroundColor: colors.bgCardHover,
+              alignItems: 'center', justifyContent: 'center',
+              marginRight: 4,
+            }}
+          >
+            <Text style={{ color: colors.textDim, fontSize: 16, fontWeight: '800' }}>{'\u2039'}</Text>
+          </TouchableOpacity>
         <ScrollView
+          ref={scrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingHorizontal: 4, paddingVertical: 2 }}
-          style={{ marginBottom: 8, maxWidth: '100%' }}
+          style={{ flex: 1 }}
+          onScroll={(e) => setScrollPos(e.nativeEvent.contentOffset.x)}
+          scrollEventThrottle={16}
         >
           {/* Classic (no persona) option */}
           <TouchableOpacity
@@ -140,6 +162,22 @@ export function TitleScreen() {
             );
           })}
         </ScrollView>
+          <TouchableOpacity
+            onPress={() => {
+              const newPos = scrollPos + cardWidth * 2;
+              scrollRef.current?.scrollTo({ x: newPos, animated: true });
+              setScrollPos(newPos);
+            }}
+            style={{
+              width: 28, height: 28, borderRadius: 14,
+              backgroundColor: colors.bgCardHover,
+              alignItems: 'center', justifyContent: 'center',
+              marginLeft: 4,
+            }}
+          >
+            <Text style={{ color: colors.textDim, fontSize: 16, fontWeight: '800' }}>{'\u203A'}</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Persona detail panel */}
         {selectedPersona && (() => {
