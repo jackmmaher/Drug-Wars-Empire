@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, DAYS, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, getRank, getRegionForLocation, getRegion } from '../constants/game';
+import { $, DAYS, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, getRank, getRegionForLocation, getRegion } from '../constants/game';
 import { inventoryCount, netWorth, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
@@ -25,6 +25,11 @@ export function GameHeader() {
   const conGang = cp.consignment ? GANGS.find(g => g.id === cp.consignment!.gangId) : null;
   const conLoc = cp.consignment ? LOCATIONS.find(l => l.id === cp.consignment!.originLocation) : null;
 
+  const rival = useGameStore(s => {
+    if (s.mode !== '2p') return null;
+    return s.turn === 1 ? s.p2 : s.p1;
+  });
+
   return (
     <View style={styles.container}>
       {/* 2P indicator */}
@@ -36,6 +41,18 @@ export function GameHeader() {
           <View style={[styles.turnBadge, turn === 2 && styles.turnActive2]}>
             <Text style={[styles.turnText, turn === 2 && { color: colors.blue }]}>P2</Text>
           </View>
+        </View>
+      )}
+
+      {/* Rival intel bar */}
+      {mode === '2p' && rival && (
+        <View style={styles.rivalBar}>
+          <Text style={styles.rivalText}>
+            P{turn === 1 ? 2 : 1}: {LOCATIONS.find(l => l.id === rival.location)?.name || '???'}
+          </Text>
+          <Text style={styles.rivalText}>
+            {$(netWorth(rival))} net | {Object.keys(rival.territories).length} turf
+          </Text>
         </View>
       )}
 
@@ -53,11 +70,20 @@ export function GameHeader() {
         </View>
 
         <View style={styles.statsRow}>
-          <MiniStat label="DEBT" value={$(cp.debt)} color={cp.debt > 0 ? colors.red : colors.green} />
+          <MiniStat label="DEBT" value={$(cp.debt)} color={cp.debt > STARTING_DEBT * 2 ? colors.red : cp.debt > 0 ? colors.orange : colors.green} />
           <MiniStat label="BANK" value={$(cp.bank)} color={colors.blue} />
           <MiniStat label="SPACE" value={`${free}/${espce}`} color={free < 15 ? colors.yellow : colors.textMuted} />
           <MiniStat label="REP" value={cp.rep} color={colors.purple} />
         </View>
+
+        {cp.debt > STARTING_DEBT * 3 && (
+          <View style={styles.debtWarningRow}>
+            <Text style={styles.debtWarningText}>{'\u26A0'} Debt compounding!</Text>
+            {cp.day < DAYS && (
+              <Text style={styles.debtProjection}>{'\u2192'} ~{$(Math.round(cp.debt * Math.pow(1.1, DAYS - cp.day)))} by D{DAYS}</Text>
+            )}
+          </View>
+        )}
 
         <Bar label="🔥 HEAT" percent={cp.heat} color={cp.heat < 30 ? colors.green : cp.heat < 60 ? colors.yellow : colors.red} />
         <Bar label="❤️ HP" percent={cp.hp} color={cp.hp > 60 ? colors.green : cp.hp > 30 ? colors.yellow : colors.red} />
@@ -212,9 +238,31 @@ function OfferBanner() {
     isFree = true;
   }
 
+  // Consignment return cost warning
+  let returnCostWarning: React.ReactNode = null;
+  if (o.type === 'consignment' && o.originLocation) {
+    const originRegion = getRegionForLocation(o.originLocation);
+    const currentRegion = getRegionForLocation(cp.location);
+    if (originRegion && currentRegion && originRegion.id !== currentRegion.id) {
+      const returnCost = originRegion.id === 'nyc'
+        ? Math.round(currentRegion.flyCost / 2)
+        : originRegion.flyCost;
+      const originLocName = LOCS.find(l => l.id === o.originLocation)?.name || o.originLocation;
+      returnCostWarning = (
+        <View style={styles.consignmentReturnWarning}>
+          <Text style={styles.returnCostText}>{'\uD83D\uDCCD'} Return to {originLocName} costs {$(returnCost)} flight</Text>
+          {cp.cash < returnCost + (o.amountOwed || 0) && (
+            <Text style={styles.returnCostDanger}>{'\u26A0'} May not afford return + payment</Text>
+          )}
+        </View>
+      );
+    }
+  }
+
   return (
     <View style={styles.offerBar}>
       <Text style={styles.offerText}>{offerText}</Text>
+      {returnCostWarning}
       <View style={styles.offerButtons}>
         <TouchableOpacity onPress={acceptOffer} disabled={!isFree && cp.cash < offerCost} style={[styles.offerBtn, styles.acceptBtn]}>
           <Text style={styles.offerBtnText}>Accept</Text>
@@ -384,4 +432,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239,68,68,0.2)',
   },
   consignmentText: { fontSize: 10, fontWeight: '600', color: colors.yellow },
+  debtWarningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 1,
+  },
+  debtWarningText: { fontSize: 7, fontWeight: '700', color: colors.red },
+  debtProjection: { fontSize: 7, color: colors.textMuted },
+  consignmentReturnWarning: { marginBottom: 2 },
+  returnCostText: { fontSize: 8, color: colors.textMuted },
+  returnCostDanger: { fontSize: 8, color: colors.yellow, fontWeight: '600' },
+  rivalBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(99,102,241,0.06)',
+    borderRadius: 3,
+    marginHorizontal: 8,
+    marginBottom: 2,
+  },
+  rivalText: { fontSize: 8, color: '#6366f1' },
 });

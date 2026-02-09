@@ -1,8 +1,11 @@
 import { create } from 'zustand';
-import type { PlayerState, GamePhase, GameMode, TabId, TradeInfo, Offer } from '../types/game';
+import type { PlayerState, GamePhase, GameMode, TabId, TradeInfo, Offer, SharedMarket } from '../types/game';
 import {
   createPlayerState, travel as travelLogic, executeTrade, copAction,
   handleOffer, bankAction, payShark, borrowShark, payRat as payRatLogic,
+  payConsignment as payConsignmentLogic,
+  stashDrug as stashDrugLogic, retrieveDrug as retrieveDrugLogic,
+  generateSharedMarket, isLocationOwnedByRival,
   inventoryCount, netWorth, checkMilestones, effectiveSpace,
   type SideEffect,
 } from '../lib/game-logic';
@@ -23,6 +26,7 @@ interface GameStore {
   player: PlayerState;
   p1: PlayerState | null;
   p2: PlayerState | null;
+  sharedMarket: SharedMarket | null;
 
   // UI state
   activeTab: TabId;
@@ -41,7 +45,7 @@ interface GameStore {
   currentNetWorth: () => number;
 
   // Actions
-  startGame: (mode: GameMode) => void;
+  startGame: (mode: GameMode, difficulty?: 'conservative' | 'standard' | 'highroller') => void;
   travel: (locationId: string) => void;
   openTrade: (drugId: string, type: 'buy' | 'sell') => void;
   setTradeQuantity: (qty: string) => void;
@@ -53,6 +57,9 @@ interface GameStore {
   bank: (action: 'deposit' | 'withdraw', amount: number | 'all') => void;
   shark: (amount: number | 'all') => void;
   borrow: (amount: number) => void;
+  payConsignment: (amount: number | 'all') => void;
+  stashDrug: (drugId: string, qty: number) => void;
+  retrieveDrug: (drugId: string, qty: number) => void;
   payRat: () => void;
   setTab: (tab: TabId) => void;
   setSubPanel: (panel: string | null) => void;
@@ -72,6 +79,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   player: createPlayerState(),
   p1: null,
   p2: null,
+  sharedMarket: null,
 
   activeTab: 'market',
   activeTrade: null,
@@ -99,28 +107,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentNetWorth: () => netWorth(get().currentPlayer()),
 
   // Actions
-  startGame: (mode) => {
+  startGame: (mode, difficulty = 'standard') => {
     if (mode === '2p') {
+      const initialMarket = generateSharedMarket(1);
+      const p1 = createPlayerState('bronx', difficulty);
+      const p2 = createPlayerState('brooklyn', difficulty);
+      // Apply shared market prices to both players' starting locations
+      p1.prices = initialMarket.prices['bronx'] || p1.prices;
+      p1.currentEvent = initialMarket.regionEvents['nyc'] || null;
+      p2.prices = initialMarket.prices['brooklyn'] || p2.prices;
+      p2.currentEvent = initialMarket.regionEvents['nyc'] || null;
       set({
         mode: '2p',
         phase: 'playing',
         turn: 1,
-        p1: { ...createPlayerState('bronx') },
-        p2: { ...createPlayerState('brooklyn') },
+        p1,
+        p2,
         player: createPlayerState(),
         activeTab: 'market',
         subPanel: null,
+        sharedMarket: initialMarket,
       });
     } else {
       set({
         mode: 'solo',
         phase: 'playing',
         turn: 1,
-        player: createPlayerState(),
+        player: createPlayerState('bronx', difficulty),
         p1: null,
         p2: null,
         activeTab: 'market',
         subPanel: null,
+        sharedMarket: null,
       });
     }
   },
@@ -139,6 +157,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     if (result.notifications.length > 0 && result.player === cp) return;
+
+    // In 2P mode, override prices from shared market for the destination
+    if (s.mode === '2p' && s.sharedMarket) {
+      const destPrices = s.sharedMarket.prices[result.player.location];
+      if (destPrices) {
+        result.player = { ...result.player, prices: destPrices };
+        const region = LOCATIONS.find(l => l.id === result.player.location)?.region;
+        if (region && s.sharedMarket.regionEvents[region]) {
+          result.player.currentEvent = s.sharedMarket.regionEvents[region];
+        }
+      }
+    }
 
     if (s.mode === '2p') {
       const key = s.turn === 1 ? 'p1' : 'p2';
@@ -174,7 +204,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!price) return;
 
     const used = inventoryCount(cp.inventory);
-    const free = cp.space - used;
+    const free = effectiveSpace(cp) - used;
     const own = cp.inventory[drug.id] || 0;
     const maxBuy = Math.min(Math.floor(cp.cash / price), free);
     const maxQty = s.activeTrade!.type === 'buy' ? maxBuy : own;
@@ -212,6 +242,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   acceptOffer: () => {
     const s = get();
     const cp = s.currentPlayer();
+
+    // Territory exclusivity check in 2P mode
+    if (s.mode === '2p' && cp.offer?.type === 'territory') {
+      const rival = s.turn === 1 ? s.p2 : s.p1;
+      if (isLocationOwnedByRival(rival, cp.offer.locationId!)) {
+        get().notify('Rival already controls this territory!', 'danger');
+        return;
+      }
+    }
+
     const result = handleOffer(cp, true);
     processEffects(result.effects, set);
     updatePlayer(s, result.player, set);
@@ -245,6 +285,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
     updatePlayer(s, result, set);
   },
 
+  payConsignment: (amount) => {
+    const s = get();
+    const cp = s.currentPlayer();
+    const result = payConsignmentLogic(cp, amount);
+    processEffects(result.effects, set);
+    updatePlayer(s, result.player, set);
+  },
+
+  stashDrug: (drugId, qty) => {
+    const s = get();
+    const cp = s.currentPlayer();
+    const result = stashDrugLogic(cp, drugId, qty);
+    processEffects(result.effects, set);
+    updatePlayer(s, result.player, set);
+  },
+
+  retrieveDrug: (drugId, qty) => {
+    const s = get();
+    const cp = s.currentPlayer();
+    const result = retrieveDrugLogic(cp, drugId, qty);
+    processEffects(result.effects, set);
+    updatePlayer(s, result.player, set);
+  },
+
   payRat: () => {
     const s = get();
     const cp = s.currentPlayer();
@@ -266,7 +330,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   endTurn: () => {
     const s = get();
     if (s.mode === '2p') {
-      set({ turn: s.turn === 1 ? 2 : 1 });
+      const nextTurn = s.turn === 1 ? 2 : 1;
+
+      // When cycling back to P1, advance the shared market day
+      if (nextTurn === 1 && s.sharedMarket) {
+        const nextDay = s.sharedMarket.day + 1;
+        const newMarket = generateSharedMarket(nextDay);
+        set({
+          turn: nextTurn,
+          sharedMarket: { ...newMarket, day: nextDay },
+        });
+      } else {
+        set({ turn: nextTurn });
+      }
     }
   },
 
@@ -278,6 +354,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       player: createPlayerState(),
       p1: null,
       p2: null,
+      sharedMarket: null,
       activeTab: 'market',
       activeTrade: null,
       tradeQuantity: '',

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, DRUGS, LOCATIONS } from '../constants/game';
+import { $, DRUGS, LOCATIONS, STASH_CAPACITY } from '../constants/game';
 import { inventoryCount } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
@@ -13,12 +13,17 @@ export function MarketTab() {
   const borrow = useGameStore(s => s.borrow);
   const subPanel = useGameStore(s => s.subPanel);
   const setSubPanel = useGameStore(s => s.setSubPanel);
+  const stashAction = useGameStore(s => s.stashDrug);
+  const retrieveAction = useGameStore(s => s.retrieveDrug);
 
   const used = inventoryCount(cp.inventory);
   const free = cp.space - used;
   const loc = LOCATIONS.find(l => l.id === cp.location);
   const hasBank = !!loc?.bank;
   const hasShark = !!loc?.shark;
+  const territory = cp.territories[cp.location];
+  const stash = territory?.stash || {};
+  const stashCount = Object.values(stash).reduce((a: number, b: number) => a + b, 0);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -159,6 +164,14 @@ export function MarketTab() {
             >
               <Text style={[styles.tradeBtnText, own > 0 && pr ? { color: '#fff' } : { color: colors.textDarkest }]}>SELL</Text>
             </TouchableOpacity>
+            {territory && own > 0 && (
+              <TouchableOpacity
+                onPress={() => stashAction(d.id, own)}
+                style={styles.stashBtn}
+              >
+                <Text style={styles.stashBtnText}>STASH</Text>
+              </TouchableOpacity>
+            )}
           </View>
         );
       })}
@@ -187,6 +200,29 @@ export function MarketTab() {
               </View>
             );
           })}
+        </View>
+      )}
+
+      {/* Stash panel (at owned territory) */}
+      {territory && (
+        <View style={styles.stashPanel}>
+          <Text style={styles.stashHeader}>STASH ({stashCount}/{STASH_CAPACITY})</Text>
+          {Object.entries(stash).filter(([, q]) => q > 0).map(([id, q]) => {
+            const drug = DRUGS.find(d => d.id === id);
+            if (!drug) return null;
+            return (
+              <View key={id} style={styles.stashRow}>
+                <Text style={styles.stashRowText}>{drug.emoji} {drug.name}: {q}</Text>
+                <TouchableOpacity
+                  onPress={() => retrieveAction(id, q)}
+                  style={styles.stashTakeBtn}
+                >
+                  <Text style={styles.stashTakeBtnText}>Take All</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+          {stashCount === 0 && <Text style={styles.stashEmpty}>Empty. Stash drugs here for safekeeping.</Text>}
         </View>
       )}
     </ScrollView>
@@ -290,4 +326,30 @@ const styles = StyleSheet.create({
   invTagQty: { fontSize: 10, fontWeight: '800', color: colors.text },
   invTagVal: { fontSize: 9, color: colors.textMuted, width: 52, textAlign: 'right' },
   invTagPnl: { fontSize: 8, fontWeight: '700', width: 32, textAlign: 'right' },
+  stashBtn: {
+    backgroundColor: '#1e293b',
+    borderRadius: 3,
+    paddingVertical: 4,
+    width: 40,
+    alignItems: 'center',
+  },
+  stashBtnText: { fontSize: 7, fontWeight: '800', color: '#94a3b8' },
+  stashPanel: { marginTop: 6, gap: 2 },
+  stashHeader: { fontSize: 7, color: colors.textDark, letterSpacing: 1, marginBottom: 2 },
+  stashRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+  },
+  stashRowText: { fontSize: 10, color: '#94a3b8' },
+  stashTakeBtn: {
+    backgroundColor: '#1e293b',
+    borderRadius: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  stashTakeBtnText: { fontSize: 9, color: '#cbd5e1', fontWeight: '600' },
+  stashEmpty: { fontSize: 9, color: '#334155', paddingHorizontal: 6 },
 });

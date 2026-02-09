@@ -2,14 +2,15 @@ import type { Drug, Location, Gang, Rank, MarketEvent, Milestone, PlayerState, R
 
 // ── CONFIG ─────────────────────────────────────────────────
 export const DAYS = 30;
-export const STARTING_CASH = 2000;
-export const STARTING_DEBT = 5500;
+export const STARTING_CASH = 3500;
+export const STARTING_DEBT = 4000;
 export const STARTING_SPACE = 100;
 export const DEBT_INTEREST = 0.10;
 export const BANK_INTEREST = 0.05;
 export const HEAT_CAP = 100;
 export const CONSIGNMENT_TURNS = 5;
 export const CONSIGNMENT_MARKUP = 2.0;
+export const STASH_CAPACITY = 50;
 
 // ── HELPERS ────────────────────────────────────────────────
 export const R = (a: number, b: number) => Math.floor(Math.random() * (b - a + 1)) + a;
@@ -94,7 +95,7 @@ export const REGIONS: Region[] = [
   },
   {
     id: 'colombia', name: 'Colombia', emoji: '🇨🇴', color: '#dc2626',
-    rep: 30, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.3, heroin: 0.8 }, gangId: 'car',
+    rep: 20, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.3, heroin: 0.8 }, gangId: 'car',
     law: COLOMBIA_LAW, customsStrictness: 0.15, contraband: ['heroin'],
   },
   {

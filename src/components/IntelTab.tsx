@@ -8,6 +8,7 @@ import { Bar } from './Bar';
 export function IntelTab() {
   const cp = useGameStore(s => s.currentPlayer());
   const payRatAction = useGameStore(s => s.payRat);
+  const payConsignmentAction = useGameStore(s => s.payConsignment);
 
   const pendingTip = cp.rat.pendingTip;
   const tipDrug = pendingTip ? DRUGS.find(d => d.id === pendingTip.drugId) : null;
@@ -88,6 +89,25 @@ export function IntelTab() {
                 Deadline: {con.turnsLeft > 0 ? `${con.turnsLeft} turn${con.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'}
               </Text>
               <Text style={styles.consignmentRow}>Return to: {conLoc?.emoji} {conLoc?.name}</Text>
+              <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+                {[1000, 5000].map(amt => (
+                  <TouchableOpacity
+                    key={amt}
+                    style={[styles.payRatBtn, { backgroundColor: '#b45309' }, cp.cash < amt && { opacity: 0.4 }]}
+                    onPress={() => payConsignmentAction(amt)}
+                    disabled={cp.cash < amt || !cp.consignment}
+                  >
+                    <Text style={styles.payRatText}>Pay ${amt / 1000}K</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[styles.payRatBtn, { backgroundColor: '#b45309' }, cp.cash <= 0 && { opacity: 0.4 }]}
+                  onPress={() => payConsignmentAction('all')}
+                  disabled={cp.cash <= 0 || !cp.consignment}
+                >
+                  <Text style={styles.payRatText}>Pay All</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </>
         );

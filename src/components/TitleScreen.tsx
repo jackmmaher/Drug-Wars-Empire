@@ -8,6 +8,7 @@ const TAGS = ['🌍 International', '🏴 Territory', '🐀 Informants', '⚔️
 
 export function TitleScreen() {
   const startGame = useGameStore(s => s.startGame);
+  const [difficulty, setDifficulty] = React.useState<'conservative' | 'standard' | 'highroller'>('standard');
 
   return (
     <View style={styles.container}>
@@ -32,11 +33,38 @@ export function TitleScreen() {
           ))}
         </View>
 
+        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 12, justifyContent: 'center' }}>
+          {([
+            { id: 'conservative', emoji: '\u{1F6E1}\uFE0F', label: 'Safe', cash: '$500', debt: '$2K' },
+            { id: 'standard', emoji: '\u2696\uFE0F', label: 'Standard', cash: '$3.5K', debt: '$4K' },
+            { id: 'highroller', emoji: '\u{1F3B2}', label: 'High Roller', cash: '$6K', debt: '$12K' },
+          ] as const).map(d => (
+            <TouchableOpacity
+              key={d.id}
+              onPress={() => setDifficulty(d.id)}
+              style={{
+                flex: 1,
+                backgroundColor: difficulty === d.id ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.02)',
+                borderWidth: 1,
+                borderColor: difficulty === d.id ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)',
+                borderRadius: 6,
+                paddingVertical: 8,
+                paddingHorizontal: 4,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>{d.emoji}</Text>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: difficulty === d.id ? '#ef4444' : '#94a3b8', marginTop: 2 }}>{d.label}</Text>
+              <Text style={{ fontSize: 8, color: '#475569', marginTop: 2 }}>{d.cash} / {d.debt}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <View style={styles.buttons}>
-          <TouchableOpacity style={styles.soloBtn} onPress={() => startGame('solo')} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.soloBtn} onPress={() => startGame('solo', difficulty)} activeOpacity={0.8}>
             <Text style={styles.btnText}>SOLO</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.twoPlayerBtn} onPress={() => startGame('2p')} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.twoPlayerBtn} onPress={() => startGame('2p', difficulty)} activeOpacity={0.8}>
             <Text style={styles.btnText}>2 PLAYER</Text>
           </TouchableOpacity>
         </View>

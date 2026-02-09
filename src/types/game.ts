@@ -130,6 +130,7 @@ export interface Offer {
 export interface Territory {
   tribute: number;
   acquiredDay: number;
+  stash: Record<string, number>;
 }
 
 export interface NearMiss {
@@ -145,6 +146,11 @@ export interface EventLog {
   day: number;
   message: string;
   type: 'info' | 'danger' | 'spike' | 'crash' | 'tip' | 'customs' | 'consignment';
+}
+
+export interface Forecast {
+  regionId: string;
+  type: 'spike' | 'crash';
 }
 
 export interface RecentSold {
@@ -193,11 +199,19 @@ export interface PlayerState {
   consignment: Consignment | null;
   fingers: number;
   consignmentsCompleted: number;
+  forecast: Forecast | null;
+}
+
+export interface SharedMarket {
+  day: number;
+  prices: Record<string, Record<string, number | null>>; // locationId -> drugId -> price
+  regionEvents: Record<string, MarketEvent | null>; // regionId -> event for the day
 }
 
 export type GamePhase = 'title' | 'playing' | 'cop' | 'win' | 'end';
 export type GameMode = 'solo' | '2p';
 export type TabId = 'market' | 'map' | 'intel';
+export type Difficulty = 'conservative' | 'standard' | 'highroller';
 
 export interface TradeInfo {
   type: 'buy' | 'sell';

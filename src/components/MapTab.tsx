@@ -18,13 +18,26 @@ export function MapTab() {
   const carryingUnits = inventoryCount(cp.inventory);
   const conOrigin = cp.consignment?.originLocation;
   const conOverdue = cp.consignment && cp.consignment.turnsLeft <= 0;
+  const forecast = cp.forecast;
+
+  const rival = useGameStore(s => {
+    if (s.mode !== '2p') return null;
+    return s.turn === 1 ? s.p2 : s.p1;
+  });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Current Region */}
-      <Text style={styles.sectionLabel}>
-        {currentRegion?.emoji} {currentRegion?.name?.toUpperCase() || 'NEW YORK'}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={styles.sectionLabel}>
+          {currentRegion?.emoji} {currentRegion?.name?.toUpperCase() || 'NEW YORK'}
+        </Text>
+        {forecast && forecast.regionId === currentRegion?.id && (
+          <Text style={{ fontSize: 8, color: forecast.type === 'spike' ? '#f59e0b' : '#14b8a6', marginLeft: 6 }}>
+            {forecast.type === 'spike' ? '\ud83d\udcc8 Rumors...' : '\ud83d\udcc9 Whispers...'}
+          </Text>
+        )}
+      </View>
       <View style={styles.nycGrid}>
         {regionLocs.map(l => {
           const cur = l.id === cp.location;
@@ -49,7 +62,8 @@ export function MapTab() {
               <Text style={styles.locEmoji}>{l.emoji}</Text>
               <Text style={[styles.locName, cur && { color: l.color, fontWeight: '800' }]}>{l.name}</Text>
               {own && <Text style={styles.ownedLabel}>🏴 Yours</Text>}
-              {g && !own && <Text style={[styles.gangLabel, { color: g.color }]}>{g.emoji}</Text>}
+              {rival?.territories[l.id] && <Text style={styles.rivalLabel}>Rival</Text>}
+              {g && !own && !rival?.territories[l.id] && <Text style={[styles.gangLabel, { color: g.color }]}>{g.emoji}</Text>}
               {conOrigin === l.id && (
                 <Text style={[styles.returnLabel, conOverdue && { color: colors.red }]}>📍 Return here</Text>
               )}
@@ -117,6 +131,16 @@ export function MapTab() {
                   )}
                 </Text>
               )}
+              {ok && forecast && forecast.regionId === r.id && (
+                <Text style={{
+                  fontSize: 7,
+                  fontWeight: '700',
+                  color: forecast.type === 'spike' ? '#f59e0b' : '#14b8a6',
+                  marginTop: 1,
+                }}>
+                  {forecast.type === 'spike' ? '\ud83d\udcc8 Rumors of activity' : '\ud83d\udcc9 Market whispers'}
+                </Text>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -158,6 +182,7 @@ const styles = StyleSheet.create({
   locEmoji: { fontSize: 14, marginBottom: 1 },
   locName: { fontSize: 10, fontWeight: '600', color: colors.textDim, textAlign: 'center' },
   ownedLabel: { fontSize: 7, color: colors.green },
+  rivalLabel: { fontSize: 7, color: '#6366f1', fontWeight: '700' },
   gangLabel: { fontSize: 7 },
   serviceLabel: { fontSize: 6, color: colors.textDark },
   intlGrid: {

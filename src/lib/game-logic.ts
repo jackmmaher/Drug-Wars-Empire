@@ -1,10 +1,10 @@
-import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment } from '../types/game';
+import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment, Forecast, SharedMarket } from '../types/game';
 import {
   DRUGS, LOCATIONS, GANGS, EVENTS, MILESTONES, REGIONS,
   RAT_NAMES, RAT_TYPES,
   DAYS, STARTING_CASH, STARTING_DEBT, STARTING_SPACE,
   DEBT_INTEREST, BANK_INTEREST, HEAT_CAP,
-  CONSIGNMENT_TURNS, CONSIGNMENT_MARKUP,
+  CONSIGNMENT_TURNS, CONSIGNMENT_MARKUP, STASH_CAPACITY,
   R, C, getRegionForLocation, DEFAULT_LAW,
 } from '../constants/game';
 
@@ -43,13 +43,19 @@ export function makeRat(): Rat {
 }
 
 // ── Player Init ────────────────────────────────────────────
-export function createPlayerState(locationId = 'bronx'): PlayerState {
+export function createPlayerState(locationId = 'bronx', difficulty: 'conservative' | 'standard' | 'highroller' = 'standard'): PlayerState {
+  const difficultySettings = {
+    conservative: { cash: 500, debt: 2000 },
+    standard: { cash: STARTING_CASH, debt: STARTING_DEBT },
+    highroller: { cash: 6000, debt: 12000 },
+  };
+  const settings = difficultySettings[difficulty];
   const regionId = getRegionForLocation(locationId)?.id || 'nyc';
   const ev = selectEvent(regionId, null, 0.35);
   return {
     day: 1,
-    cash: STARTING_CASH,
-    debt: STARTING_DEBT,
+    cash: settings.cash,
+    debt: settings.debt,
     bank: 0,
     location: locationId,
     inventory: {},
@@ -86,6 +92,7 @@ export function createPlayerState(locationId = 'bronx'): PlayerState {
     consignment: null,
     fingers: 10,
     consignmentsCompleted: 0,
+    forecast: null,
   };
 }
 
@@ -235,7 +242,15 @@ export function effectiveSpace(p: PlayerState): number {
 
 // ── Net Worth ──────────────────────────────────────────────
 export function netWorth(p: PlayerState): number {
-  return p.cash + p.bank - p.debt + Object.entries(p.inventory).reduce((s, [id, q]) => {
+  let stashValue = 0;
+  for (const terr of Object.values(p.territories)) {
+    const stash = terr.stash || {};
+    for (const [id, q] of Object.entries(stash)) {
+      const d = DRUGS.find(x => x.id === id);
+      stashValue += q * ((p.prices[id] as number) || d!.min);
+    }
+  }
+  return p.cash + p.bank - p.debt + stashValue + Object.entries(p.inventory).reduce((s, [id, q]) => {
     const d = DRUGS.find(x => x.id === id);
     return s + q * ((p.prices[id] as number) || d!.min);
   }, 0);
@@ -374,6 +389,22 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
     p.rat = { ...p.rat, pendingTip: null };
   }
 
+  // ── Forecast (vague hint about next turn's activity) ──
+  p.forecast = null;
+  if (C(0.40)) {
+    const forecastRegion = REGIONS[R(0, REGIONS.length - 1)];
+    const accurate = C(0.60);
+    if (accurate) {
+      const eligible = EVENTS.filter(e => !e.regionId || e.regionId === forecastRegion.id);
+      if (eligible.length > 0) {
+        const fev = eligible[R(0, eligible.length - 1)];
+        p.forecast = { regionId: forecastRegion.id, type: fev.type };
+      }
+    } else {
+      p.forecast = { regionId: forecastRegion.id, type: C(0.5) ? 'spike' : 'crash' };
+    }
+  }
+
   // Near misses
   const nms: NearMiss[] = [];
   if (p.recentSold && p.recentSold.length > 0) {
@@ -400,21 +431,29 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
       notifications.push({ message: `⏰ LAST TURN to repay ${cGang?.name || 'the gang'}!`, type: 'danger' });
     }
 
-    // Auto-settlement if on gang's origin location
+    // Settlement at gang's origin location
     if (p.location === p.consignment.originLocation) {
-      const isOverdue = p.consignment.turnsLeft < 0;
-      const settlement = settleConsignment(p, isOverdue);
-      // Apply settlement — return early since settlement may end game
-      const sp = settlement.player;
-      sp.cops = null; // Ensure no cop encounter on settlement turn
-
-      if (sp.fingers <= 0 || sp.hp <= 0) {
-        return { player: sp, phase: 'end', effects: [...effects, ...settlement.effects], notifications };
+      if (p.consignment.turnsLeft <= 0) {
+        // Overdue — forced settlement, no choice
+        const isOverdue = true;
+        const settlement = settleConsignment(p, isOverdue);
+        const sp = settlement.player;
+        sp.cops = null;
+        if (sp.fingers <= 0 || sp.hp <= 0) {
+          return { player: sp, phase: 'end', effects: [...effects, ...settlement.effects], notifications };
+        }
+        Object.assign(p, sp);
+        effects.push(...settlement.effects);
+      } else {
+        // On time — offer settlement as a choice
+        const con = p.consignment;
+        const remaining = con.amountOwed - con.amountPaid;
+        const gang = GANGS.find(g => g.id === con.gangId);
+        notifications.push({
+          message: `${gang?.emoji || '🤝'} ${gang?.name || 'The gang'} is here. You owe $${remaining.toLocaleString()}. Settle via consignment panel.`,
+          type: 'info',
+        });
       }
-
-      // Continue with settled player
-      Object.assign(p, sp);
-      effects.push(...settlement.effects);
     }
     // Bounty hunter check if overdue and NOT on origin turf
     else if (p.consignment && p.consignment.turnsLeft < 0) {
@@ -726,7 +765,7 @@ export function handleOffer(player: PlayerState, accept: boolean): { player: Pla
     p.eventLog = [...p.eventLog, { day: p.day, message: `🐀 Hired ${o.rat.name}.`, type: 'info' }];
   } else if (o.type === 'territory' && p.cash >= (o.cost || 0)) {
     p.cash -= o.cost!;
-    p.territories = { ...p.territories, [o.locationId!]: { tribute: o.tribute!, acquiredDay: p.day } };
+    p.territories = { ...p.territories, [o.locationId!]: { tribute: o.tribute!, acquiredDay: p.day, stash: {} } };
     p.rep += 15;
     effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
     const loc = LOCATIONS.find(l => l.id === o.locationId);
@@ -799,6 +838,41 @@ export function borrowShark(player: PlayerState, amount: number): PlayerState {
   return p;
 }
 
+// ── Consignment: Manual Payment ─────────────────────────
+export function payConsignment(player: PlayerState, amount: number | 'all'): { player: PlayerState; effects: SideEffect[] } {
+  const effects: SideEffect[] = [];
+  if (!player.consignment) return { player, effects };
+
+  const p = { ...player };
+  const con = { ...p.consignment! };
+  const remaining = con.amountOwed - con.amountPaid;
+  const payment = amount === 'all' ? Math.min(p.cash, remaining) : Math.min(amount, p.cash, remaining);
+
+  if (payment <= 0) return { player, effects };
+
+  p.cash -= payment;
+  con.amountPaid += payment;
+
+  if (con.amountPaid >= con.amountOwed) {
+    // Fully paid remotely — clean settlement
+    p.consignment = null;
+    p.consignmentsCompleted++;
+    const gang = GANGS.find(g => g.id === con.gangId);
+    p.gangRelations = { ...p.gangRelations, [con.gangId]: (p.gangRelations[con.gangId] ?? 0) + 5 };
+    p.eventLog = [...p.eventLog, { day: p.day, message: `${gang?.emoji || '🤝'} Paid off ${gang?.name || 'the gang'} in full.`, type: 'consignment' as const }];
+    effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
+
+    const { milestones, newMilestone } = checkMilestones(p);
+    p.milestones = milestones;
+    p.newMilestone = newMilestone;
+  } else {
+    p.consignment = con;
+    effects.push({ type: 'haptic', style: 'light' });
+  }
+
+  return { player: p, effects };
+}
+
 // ── Pay Rat (upgraded: can generate immediate tip) ─────────
 export function payRat(player: PlayerState): { player: PlayerState; effects: SideEffect[]; tipGenerated: boolean } {
   if (player.cash < 150 || !player.rat.hired || !player.rat.alive) {
@@ -824,6 +898,53 @@ export function payRat(player: PlayerState): { player: PlayerState; effects: Sid
   }
 
   return { player: p, effects: [{ type: 'haptic', style: 'light' }], tipGenerated };
+}
+
+// ── Stash Operations ─────────────────────────────────────
+export function stashDrug(player: PlayerState, drugId: string, quantity: number): { player: PlayerState; effects: SideEffect[] } {
+  const effects: SideEffect[] = [];
+  const p = { ...player };
+  const territory = p.territories[p.location];
+  if (!territory) return { player, effects };
+
+  const stash = territory.stash || {};
+  const currentStashCount = Object.values(stash).reduce((a, b) => a + b, 0);
+  const available = STASH_CAPACITY - currentStashCount;
+  const owned = p.inventory[drugId] || 0;
+  const qty = Math.min(quantity, owned, available);
+  if (qty <= 0) return { player, effects };
+
+  const newInv = { ...p.inventory, [drugId]: owned - qty };
+  if (newInv[drugId] <= 0) delete newInv[drugId];
+  p.inventory = newInv;
+
+  const newStash = { ...stash, [drugId]: (stash[drugId] || 0) + qty };
+  p.territories = { ...p.territories, [p.location]: { ...territory, stash: newStash } };
+
+  effects.push({ type: 'sfx', sound: 'buy' }, { type: 'haptic', style: 'light' });
+  return { player: p, effects };
+}
+
+export function retrieveDrug(player: PlayerState, drugId: string, quantity: number): { player: PlayerState; effects: SideEffect[] } {
+  const effects: SideEffect[] = [];
+  const p = { ...player };
+  const territory = p.territories[p.location];
+  if (!territory) return { player, effects };
+
+  const stash = territory.stash || {};
+  const stashed = stash[drugId] || 0;
+  const freeSpace = effectiveSpace(p) - inventoryCount(p.inventory);
+  const qty = Math.min(quantity, stashed, freeSpace);
+  if (qty <= 0) return { player, effects };
+
+  p.inventory = { ...p.inventory, [drugId]: (p.inventory[drugId] || 0) + qty };
+
+  const newStash = { ...stash, [drugId]: stashed - qty };
+  if (newStash[drugId] <= 0) delete newStash[drugId];
+  p.territories = { ...p.territories, [p.location]: { ...territory, stash: newStash } };
+
+  effects.push({ type: 'sfx', sound: 'sell' }, { type: 'haptic', style: 'light' });
+  return { player: p, effects };
 }
 
 // ── Consignment: Generate Offer ──────────────────────────
@@ -1004,7 +1125,7 @@ export function bountyHunterAction(player: PlayerState, action: 'pay' | 'fight' 
     if (C(killChance)) {
       // Win — bounty hunter gone, but consignment still active (just safe for a while)
       // We mark turnsLeft to give 3 turns of breathing room
-      p.consignment = { ...con, turnsLeft: -3 }; // negative = grace turns
+      p.consignment = { ...con, turnsLeft: 3 }; // grace turns before overdue again
       p.heat = Math.min(HEAT_CAP, p.heat + 12);
       p.rep += 10;
       p.eventLog = [...p.eventLog, { day: p.day, message: `Fought off ${gangName}'s bounty hunter! They'll be back...`, type: 'consignment' as const }];
@@ -1062,4 +1183,30 @@ export function getFingerSellPenalty(fingers: number): number {
 
 export function getFingerMovePenalty(fingers: number): number {
   return fingers <= 6 ? 1 : 0;
+}
+
+// ── Shared Market (2P Mode) ─────────────────────────────
+export function generateSharedMarket(day: number): SharedMarket {
+  const regionEvents: Record<string, MarketEvent | null> = {};
+  const prices: Record<string, Record<string, number | null>> = {};
+
+  // Generate one event per region
+  for (const region of REGIONS) {
+    regionEvents[region.id] = selectEvent(region.id, null, 0.38);
+  }
+
+  // Generate prices per location based on region event
+  for (const loc of LOCATIONS) {
+    const region = REGIONS.find(r => r.id === loc.region);
+    const event = region ? regionEvents[region.id] : null;
+    prices[loc.id] = generatePrices(loc.id, event);
+  }
+
+  return { day, prices, regionEvents };
+}
+
+// ── Rival Territory Check (2P Mode) ─────────────────────
+export function isLocationOwnedByRival(rivalPlayer: PlayerState | null, locationId: string): boolean {
+  if (!rivalPlayer) return false;
+  return !!rivalPlayer.territories[locationId];
 }
