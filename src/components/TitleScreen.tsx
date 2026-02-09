@@ -288,8 +288,11 @@ export function TitleScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={{ fontSize: 12, color: colors.textDim, lineHeight: 17, marginBottom: 10 }}>
+              <Text style={{ fontSize: 12, color: colors.textDim, lineHeight: 17, marginBottom: 4 }}>
                 {persona.backstory}
+              </Text>
+              <Text style={{ fontSize: 11, color: colors.yellow, fontStyle: 'italic', fontWeight: '600', marginBottom: 10 }}>
+                &quot;{persona.motivation}&quot;
               </Text>
 
               {strengths.length > 0 && (

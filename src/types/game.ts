@@ -98,6 +98,15 @@ export interface Location {
   bank?: boolean;
   shark?: boolean;
   modifier?: LocationModifier;
+  arrivalText?: string;
+}
+
+export interface BloodBrotherPerk {
+  type: 'sellBonus' | 'buyDiscount' | 'fightBonus' | 'territoryDiscount' | 'customsEvasion' | 'regionSellBonus' | 'regionBuyDiscount';
+  value: number;
+  label: string;
+  drugIds?: string[];
+  regionId?: string;
 }
 
 export interface Gang {
@@ -106,6 +115,11 @@ export interface Gang {
   emoji: string;
   color: string;
   turf: string[];
+  leader: string;
+  description: string;
+  specialty: string[];
+  rival: string;
+  bloodBrotherPerk: BloodBrotherPerk;
 }
 
 export interface Rank {
@@ -214,6 +228,24 @@ export interface RecentSold {
   qty: number;
 }
 
+// ── Persona Mission Types ────────────────────────────────
+export interface PersonaMission {
+  id: string;
+  personaId: PersonaId;
+  name: string;
+  description: string;
+  objective: string;
+  progress: number;
+  target: number;
+  completed: boolean;
+  rewardApplied: boolean;
+  rewardDescription: string;
+  failed?: boolean;
+  regionsVisited?: string[];
+  gangMissionCounts?: Record<string, number>;
+  copEncounterTriggered?: boolean;
+}
+
 // ── Persona Types ────────────────────────────────────────
 export type PersonaId = 'chemist' | 'housewife' | 'student' | 'enforcer' | 'connected' | 'ghost';
 
@@ -251,6 +283,7 @@ export interface Persona {
   name: string;
   emoji: string;
   backstory: string;
+  motivation: string;
   tagline: string;
   modifiers: PersonaModifiers;
 }
@@ -323,6 +356,7 @@ export interface PlayerState {
   consignmentsCompleted: number;
   forecast: Forecast | null;
   personaId: PersonaId | null;
+  personaMission: PersonaMission | null;
   gangLoan: GangLoan | null;
   gangLoansRepaid: number;
   gangMission: GangMission | null;

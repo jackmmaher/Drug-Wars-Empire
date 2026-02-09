@@ -208,6 +208,14 @@ export function GameHeader() {
               helpText={`${cp.fingers}/10 fingers. Lost: -${(10 - cp.fingers) * 5} space, -${(10 - cp.fingers) * 3}% sell.${cp.fingers <= 6 ? ' +1 travel day.' : ''}${cp.fingers <= 4 ? ' Can\'t hold a gun.' : ''}`}
             />
           )}
+          {cp.personaMission && !cp.personaMission.failed && (
+            <StatusIcon
+              icon={cp.personaMission.completed ? "✅" : persona?.emoji || "🎯"}
+              value={cp.personaMission.completed ? "" : `${cp.personaMission.personaId === 'housewife' ? $(cp.personaMission.progress) : cp.personaMission.progress}/${cp.personaMission.personaId === 'housewife' ? $(cp.personaMission.target) : cp.personaMission.target}`}
+              label={cp.personaMission.completed ? "Done" : "Mission"}
+              color={cp.personaMission.completed ? colors.green : colors.purpleLight}
+            />
+          )}
           {/* Theme toggle */}
           <TouchableOpacity onPress={toggleTheme} style={{
             width: 28, height: 28, borderRadius: 14,

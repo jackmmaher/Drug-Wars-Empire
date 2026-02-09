@@ -1,4 +1,4 @@
-import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment, Forecast, PersonaId, GangLoan, GangMission, CampaignLevel, CampaignState, GangWarState } from '../types/game';
+import type { PlayerState, PersonaMission, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment, Forecast, PersonaId, GangLoan, GangMission, CampaignLevel, CampaignState, GangWarState } from '../types/game';
 import {
   DRUGS, LOCATIONS, GANGS, EVENTS, MILESTONES, REGIONS,
   RAT_NAMES, RAT_TYPES,
@@ -11,6 +11,7 @@ import {
   R, C, $, getRegionForLocation, DEFAULT_LAW,
   getPersonaModifiers, getGangFavorTier,
   DAYS_PER_LEVEL, getLevelConfig, isFeatureEnabled, isRegionAvailable,
+  PERSONA_MISSIONS,
   type CampaignFeature,
 } from '../constants/game';
 
@@ -91,6 +92,20 @@ export function createPlayerState(locationId = 'bronx', difficulty: 'conservativ
 
   const regionId = getRegionForLocation(startLoc)?.id || 'nyc';
   const ev = selectEvent(regionId, null, 0.35);
+
+  // Initialize persona mission
+  const missionDef = personaId ? PERSONA_MISSIONS[personaId] : null;
+  const personaMission: PersonaMission | null = missionDef ? {
+    ...missionDef,
+    personaId: personaId!,
+    progress: 0,
+    completed: false,
+    rewardApplied: false,
+    regionsVisited: personaId === 'ghost' ? [regionId] : undefined,
+    gangMissionCounts: personaId === 'connected' ? {} : undefined,
+    copEncounterTriggered: personaId === 'housewife' ? false : undefined,
+  } : null;
+
   return {
     day: 1,
     cash,
@@ -133,6 +148,7 @@ export function createPlayerState(locationId = 'bronx', difficulty: 'conservativ
     consignmentsCompleted: 0,
     forecast: null,
     personaId,
+    personaMission,
     gangLoan: null,
     gangLoansRepaid: 0,
     gangMission: null,
@@ -306,6 +322,18 @@ export function netWorth(p: PlayerState): number {
   }, 0);
 }
 
+// ── Rival Spillover ──────────────────────────────────────
+export function applyRivalSpillover(gangRelations: Record<string, number>, gangId: string, amount: number): Record<string, number> {
+  if (amount <= 0) return gangRelations;
+  const gang = GANGS.find(g => g.id === gangId);
+  if (!gang || !gang.rival) return gangRelations;
+  const spillover = Math.floor(amount * 0.3);
+  if (spillover <= 0) return gangRelations;
+  const newRel = { ...gangRelations };
+  newRel[gang.rival] = (newRel[gang.rival] ?? 0) - spillover;
+  return newRel;
+}
+
 // ── Side Effects Queue ─────────────────────────────────────
 export type SideEffect =
   | { type: 'sfx'; sound: 'buy' | 'sell' | 'big' | 'bad' | 'miss' | 'level' | 'tick' | 'cop' | 'finger' | 'bounty' | 'streak' }
@@ -394,6 +422,18 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   const currentRegion = getRegionForLocation(p.location) || destRegion;
   const law = currentRegion.law || DEFAULT_LAW;
 
+  // Persona mission: Ghost — track regions visited
+  if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'ghost') {
+    const newRegion = currentRegion.id;
+    if (p.personaMission.regionsVisited && !p.personaMission.regionsVisited.includes(newRegion)) {
+      const newVisited = [...p.personaMission.regionsVisited, newRegion];
+      p.personaMission = { ...p.personaMission, regionsVisited: newVisited, progress: newVisited.length };
+      if (newVisited.length >= p.personaMission.target) {
+        p.personaMission = { ...p.personaMission, completed: true, rewardApplied: true };
+      }
+    }
+  }
+
   p.debt = Math.round(p.debt * Math.pow(1 + DEBT_INTEREST, td));
   p.bank = Math.round(p.bank * Math.pow(1 + BANK_INTEREST, td));
 
@@ -416,17 +456,34 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
     p.heat = Math.max(0, p.heat - destLocObj.modifier.value);
   }
 
+  // Persona mission: Ghost — fail if heat exceeds 25
+  if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'ghost') {
+    if (p.heat > 25) {
+      p.personaMission = { ...p.personaMission, failed: true };
+    }
+  }
+
   // Tribute (L3 campaign: +50%)
   const tributeMultiplier = (gameMode === 'campaign' && p.campaignLevel === 3) ? getLevelConfig(3).territoryTributeMultiplier : 1;
   const trib = Math.round(Object.values(p.territories).reduce((s, d) => s + (d.tribute || 0), 0) * tributeMultiplier);
   p.tributePerDay = trib;
   p.cash += trib * td;
 
-  // ── Customs Check (inter-region with inventory, persona evasion bonus) ──
+  // ── Customs Check (inter-region with inventory, persona evasion bonus + BB customs perk) ──
   // France: Schengen zone — no customs checks. Makes France the safe transit hub for drug shipments.
+  // Blood Brother customs evasion bonus (best of any BB gang with customsEvasion perk)
+  let bbCustomsBonus = 0;
+  for (const g of GANGS) {
+    if (getGangFavorTier(p.gangRelations[g.id] ?? 0) >= 3 && g.bloodBrotherPerk.type === 'customsEvasion') {
+      bbCustomsBonus = Math.max(bbCustomsBonus, g.bloodBrotherPerk.value);
+    }
+  }
+  // Persona mission: Ghost reward — +20% customs evasion
+  const ghostCustomsBonus = (p.personaMission?.personaId === 'ghost' && p.personaMission.completed && p.personaMission.rewardApplied) ? 0.20 : 0;
+  const totalEvasion = mods.customsEvasionBonus + bbCustomsBonus + ghostCustomsBonus;
   if (isInterRegion && destRegion.id !== 'france') {
-    const customsResult = mods.customsEvasionBonus > 0
-      ? (C(mods.customsEvasionBonus) ? null : customsCheck(p, destRegion))
+    const customsResult = totalEvasion > 0
+      ? (C(totalEvasion) ? null : customsCheck(p, destRegion))
       : customsCheck(p, destRegion);
     if (customsResult && customsResult.caught) {
       // Apply confiscation
@@ -643,9 +700,22 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
         if (newInv[p.gangMission.drugId] <= 0) delete newInv[p.gangMission.drugId];
         p.inventory = newInv;
         p.gangRelations = { ...p.gangRelations, [p.gangMission.gangId]: (p.gangRelations[p.gangMission.gangId] ?? 0) + 5 };
+        p.gangRelations = applyRivalSpillover(p.gangRelations, p.gangMission.gangId, 5);
         p.cash += R(1000, 3000);
         p.rep += 3;
         p.gangMissionsCompleted++;
+        // Persona mission: Connected — track per-gang mission completions (delivery)
+        if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'connected' && p.personaMission.gangMissionCounts) {
+          const pmGangId = p.gangMission.gangId;
+          const counts = { ...p.personaMission.gangMissionCounts, [pmGangId]: (p.personaMission.gangMissionCounts[pmGangId] || 0) + 1 };
+          const maxCount = Math.max(...Object.values(counts));
+          p.personaMission = { ...p.personaMission, gangMissionCounts: counts, progress: maxCount };
+          if (maxCount >= p.personaMission.target) {
+            p.personaMission = { ...p.personaMission, completed: true, rewardApplied: true };
+            for (const gid of Object.keys(p.gangRelations)) { p.gangRelations[gid] = Math.min(40, (p.gangRelations[gid] ?? 0) + 5); }
+            if (!p.territories[p.location]) { p.territories = { ...p.territories, [p.location]: { tribute: R(200, 400), acquiredDay: p.day, stash: {} } }; }
+          }
+        }
         p.eventLog = [...p.eventLog, { day: p.day, message: `🎖️ Delivery complete! Gang pleased.`, type: 'mission' as const }];
         effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
         p.gangMission = null;
@@ -660,9 +730,22 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
         if (newInv[p.gangMission.drugId] <= 0) delete newInv[p.gangMission.drugId];
         p.inventory = newInv;
         p.gangRelations = { ...p.gangRelations, [p.gangMission.gangId]: (p.gangRelations[p.gangMission.gangId] ?? 0) + 5 };
+        p.gangRelations = applyRivalSpillover(p.gangRelations, p.gangMission.gangId, 5);
         p.cash += drugValue;
         p.rep += 3;
         p.gangMissionsCompleted++;
+        // Persona mission: Connected — track per-gang mission completions (supply)
+        if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'connected' && p.personaMission.gangMissionCounts) {
+          const pmGangId = p.gangMission.gangId;
+          const counts = { ...p.personaMission.gangMissionCounts, [pmGangId]: (p.personaMission.gangMissionCounts[pmGangId] || 0) + 1 };
+          const maxCount = Math.max(...Object.values(counts));
+          p.personaMission = { ...p.personaMission, gangMissionCounts: counts, progress: maxCount };
+          if (maxCount >= p.personaMission.target) {
+            p.personaMission = { ...p.personaMission, completed: true, rewardApplied: true };
+            for (const gid of Object.keys(p.gangRelations)) { p.gangRelations[gid] = Math.min(40, (p.gangRelations[gid] ?? 0) + 5); }
+            if (!p.territories[p.location]) { p.territories = { ...p.territories, [p.location]: { tribute: R(200, 400), acquiredDay: p.day, stash: {} } }; }
+          }
+        }
         p.eventLog = [...p.eventLog, { day: p.day, message: `🎖️ Supply delivered! Got ${$(drugValue)}.`, type: 'mission' as const }];
         effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
         p.gangMission = null;
@@ -732,6 +815,10 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
     const wealthBribeScale = Math.max(1, Math.log10(Math.max(1, netWorth(p)) / 10_000));
     const bribeCost = Math.round(baseBribe * law.bribeMultiplier * wealthBribeScale);
     p.cops = { count, bribeCost, regionLaw: law };
+    // Persona mission: Housewife — fail on cop encounter
+    if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'housewife') {
+      p.personaMission = { ...p.personaMission, copEncounterTriggered: true, failed: true };
+    }
     effects.push({ type: 'haptic', style: 'heavy' });
     return { player: p, phase: 'cop', effects, notifications };
   }
@@ -744,6 +831,38 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
     p.cash -= s;
     p.eventLog = [...p.eventLog, { day: p.day, message: `Mugged! Lost $${s}!`, type: 'danger' }];
     effects.push({ type: 'shake' }, { type: 'haptic', style: 'warning' });
+  }
+
+  // ── Persona Mission: travel-triggered tracking ──
+  if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed) {
+    const pm = p.personaMission;
+    // Ghost: track regions visited, fail if heat > 25
+    if (pm.personaId === 'ghost') {
+      const curRegionId = currentRegion.id;
+      const visited = new Set(pm.regionsVisited || []);
+      visited.add(curRegionId);
+      const visitedArr = [...visited];
+      if (p.heat > 25) {
+        p.personaMission = { ...pm, regionsVisited: visitedArr, failed: true };
+      } else if (visitedArr.length >= pm.target && !pm.completed) {
+        p.personaMission = { ...pm, regionsVisited: visitedArr, progress: visitedArr.length, completed: true, rewardApplied: true };
+      } else {
+        p.personaMission = { ...pm, regionsVisited: visitedArr, progress: visitedArr.length };
+      }
+    }
+    // Student: reach 35 rep by day 15, fail after day 15
+    if (pm.personaId === 'student') {
+      if (p.rep >= pm.target) {
+        p.personaMission = { ...pm, progress: p.rep, completed: true, rewardApplied: true };
+        // Student reward: wipe debt + rat intel upgrade
+        p.debt = 0;
+        if (p.rat.hired) p.rat = { ...p.rat, intel: Math.min(3, p.rat.intel + 1) };
+      } else if (p.day > 15) {
+        p.personaMission = { ...pm, progress: p.rep, failed: true };
+      } else {
+        p.personaMission = { ...pm, progress: p.rep };
+      }
+    }
   }
 
   // Offers (consignment > mission > equipment), gated by campaign level
@@ -768,9 +887,44 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
     else if (!p.rat.hired && C(0.08) && p.rep >= 10) p.offer = { type: 'rat', rat: makeRat() };
     else if (isFeatureEnabled(p.campaignLevel, 'territoryPurchase', gameMode) && p.rep >= 25 && C(0.1) && !p.territories[p.location]) {
       const lg2 = GANGS.find(g => g.turf.includes(p.location));
-      const terrCost = Math.round(R(3000, 12000) * mods.territoryDiscountMultiplier);
+      let bbTerrDiscount = 1;
+      if (lg2 && getGangFavorTier(p.gangRelations[lg2.id] ?? 0) >= 3 && lg2.bloodBrotherPerk.type === 'territoryDiscount') {
+        bbTerrDiscount = 1 - lg2.bloodBrotherPerk.value;
+      }
+      const terrCost = Math.round(R(3000, 12000) * mods.territoryDiscountMultiplier * bbTerrDiscount);
       if (!lg2 || (p.gangRelations[lg2.id] ?? 0) > 5) p.offer = { type: 'territory', locationId: p.location, cost: terrCost, tribute: R(100, 500) };
     }
+  }
+
+  // Persona mission: Student — check rep >= 35 by day 15
+  if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'student') {
+    p.personaMission = { ...p.personaMission, progress: p.rep };
+    if (p.rep >= 35 && p.day <= 15) {
+      p.personaMission = { ...p.personaMission, completed: true, rewardApplied: true };
+      p.debt = 0;
+      if (p.rat.hired && p.rat.alive) {
+        p.rat = { ...p.rat, intel: Math.min(3, p.rat.intel + 1) };
+      }
+      p.eventLog = [...p.eventLog, { day: p.day, message: `🎓 Thesis Defense complete! Debt wiped, rat intel upgraded.`, type: 'mission' as const }];
+      effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
+    } else if (p.day > 15 && p.rep < 35) {
+      p.personaMission = { ...p.personaMission, failed: true };
+    }
+  }
+
+  // Persona mission: Connected — apply reward when completed
+  if (p.personaMission && p.personaMission.completed && !p.personaMission.rewardApplied && p.personaMission.personaId === 'connected') {
+    p.personaMission = { ...p.personaMission, rewardApplied: true };
+    const newRels = { ...p.gangRelations };
+    for (const gid of Object.keys(newRels)) {
+      newRels[gid] = Math.min(40, (newRels[gid] ?? 0) + 5);
+    }
+    p.gangRelations = newRels;
+    if (!p.territories[p.location]) {
+      p.territories = { ...p.territories, [p.location]: { tribute: R(200, 400), acquiredDay: p.day, stash: {} } };
+    }
+    p.eventLog = [...p.eventLog, { day: p.day, message: `🤵 Family Business complete! All gang relations +5, free territory.`, type: 'mission' as const }];
+    effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
   }
 
   // Milestones
@@ -874,6 +1028,19 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
       const applies = !locMod.drugs || locMod.drugs.includes(drug.id);
       if (applies) buyPrice = Math.max(1, Math.round(price * (1 - locMod.value)));
     }
+    // Gang favor: Blood Brother buy discount perk
+    const localGangForBuy = GANGS.find(g => g.turf.includes(p.location));
+    if (localGangForBuy && getGangFavorTier(p.gangRelations[localGangForBuy.id] ?? 0) >= 3) {
+      const perk = localGangForBuy.bloodBrotherPerk;
+      if (perk.type === 'buyDiscount') {
+        buyPrice = Math.max(1, Math.round(buyPrice * (1 - perk.value)));
+      } else if (perk.type === 'regionBuyDiscount') {
+        const buyRegionObj = getRegionForLocation(p.location);
+        if (buyRegionObj && perk.regionId === buyRegionObj.id) {
+          buyPrice = Math.max(1, Math.round(buyPrice * (1 - perk.value)));
+        }
+      }
+    }
 
     const mx = Math.min(Math.floor(p.cash / buyPrice), free);
     const q = quantity === 'max' ? mx : Math.min(quantity, mx);
@@ -884,9 +1051,10 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
     const prevQty = player.inventory[drug.id] || 0;
     const prevAvg = player.averageCosts[drug.id] || 0;
     p.averageCosts = { ...p.averageCosts, [drug.id]: (prevAvg * prevQty + buyPrice * q) / (prevQty + q) };
-    // Buy heat: ceil(qty * price / 15000) capped at 15 + persona
+    // Buy heat: ceil(qty * price / 15000) capped at 15 + persona (Housewife reward: 0.4x heat)
     const bMods = getPersonaModifiers(p.personaId);
-    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(15, Math.ceil(q * buyPrice / 15000)) * bMods.heatGainMultiplier));
+    const buyHousewifeHeatMult = (p.personaMission?.personaId === 'housewife' && p.personaMission.completed && p.personaMission.rewardApplied) ? 0.4 : 1;
+    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(15, Math.ceil(q * buyPrice / 15000)) * bMods.heatGainMultiplier * buyHousewifeHeatMult));
     p.trades++;
 
     // Track recent trades for price memory
@@ -904,18 +1072,53 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
 
     const tMods = getPersonaModifiers(p.personaId);
     const fingerPenalty = getFingerSellPenalty(p.fingers);
-    // Gang favor: Blood Brother = +10% sell on turf
+    // Gang favor: Blood Brother = unique sell perk on turf
     const localGangForSell = GANGS.find(g => g.turf.includes(p.location));
-    const favorSellBonus = localGangForSell && getGangFavorTier(p.gangRelations[localGangForSell.id] ?? 0) >= 3 ? 0.10 : 0;
+    let favorSellBonus = 0;
+    if (localGangForSell && getGangFavorTier(p.gangRelations[localGangForSell.id] ?? 0) >= 3) {
+      const perk = localGangForSell.bloodBrotherPerk;
+      if (perk.type === 'sellBonus') {
+        favorSellBonus = (!perk.drugIds || perk.drugIds.includes(drug.id)) ? perk.value : 0.10;
+      } else if (perk.type === 'regionSellBonus') {
+        const sellRegionObj = getRegionForLocation(p.location);
+        favorSellBonus = (sellRegionObj && perk.regionId === sellRegionObj.id) ? perk.value : 0.10;
+      } else {
+        favorSellBonus = 0.10; // fallback for non-sell perks
+      }
+    }
     // Location modifier: sellBonus
     let locSellBonus = 0;
     if (locMod?.type === 'sellBonus') {
       const applies = !locMod.drugs || locMod.drugs.includes(drug.id);
       if (applies) locSellBonus = locMod.value;
     }
-    const rev = Math.round(q * price * (1 - fingerPenalty) * (1 + tMods.sellPriceBonus + favorSellBonus + locSellBonus));
+    // Persona mission: Chemist reward — +5% permanent sell bonus
+    const chemistRewardBonus = (p.personaMission?.personaId === 'chemist' && p.personaMission.completed && p.personaMission.rewardApplied) ? 0.05 : 0;
+    const rev = Math.round(q * price * (1 - fingerPenalty) * (1 + tMods.sellPriceBonus + favorSellBonus + locSellBonus + chemistRewardBonus));
     const ab = p.averageCosts[drug.id] || price;
     const pnl = rev - q * ab;
+
+    // Persona mission: Chemist — sell 20+ units at 50%+ profit
+    if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'chemist') {
+      if (q >= 20 && pnl > 0) {
+        const costBasis = q * ab;
+        const profitMargin = costBasis > 0 ? pnl / costBasis : 0;
+        if (profitMargin >= 0.5) {
+          p.personaMission = { ...p.personaMission, progress: 1, completed: true, rewardApplied: true };
+        }
+      }
+    }
+
+    // Persona mission: Housewife — track profit
+    if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'housewife') {
+      if (pnl > 0) {
+        const newProgress = p.personaMission.progress + pnl;
+        p.personaMission = { ...p.personaMission, progress: newProgress };
+        if (newProgress >= p.personaMission.target) {
+          p.personaMission = { ...p.personaMission, completed: true, rewardApplied: true };
+        }
+      }
+    }
 
     p.cash += rev;
     const newInv = { ...p.inventory, [drug.id]: own - q };
@@ -938,17 +1141,33 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
       const locRepMult = locMod?.type === 'repGain' ? (1 + locMod.value) : 1;
       p.rep += Math.ceil((pnl / 4000) * p.combo * tMods.repGainMultiplier * locRepMult);
       const g = GANGS.find(x => x.turf.includes(p.location));
-      if (g) p.gangRelations = { ...p.gangRelations, [g.id]: (p.gangRelations[g.id] ?? 0) + Math.round(1 * tMods.gangRelGainMultiplier) };
+      if (g) {
+        p.gangRelations = { ...p.gangRelations, [g.id]: (p.gangRelations[g.id] ?? 0) + Math.round(1 * tMods.gangRelGainMultiplier) };
+        p.gangRelations = applyRivalSpillover(p.gangRelations, g.id, Math.round(1 * tMods.gangRelGainMultiplier));
+      }
       // Track muscle mission progress
       if (p.gangMission && p.gangMission.type === 'muscle' && p.gangMission.targetLocation === p.location) {
         p.gangMission = { ...p.gangMission, sellProgress: (p.gangMission.sellProgress || 0) + rev };
         if (p.gangMission.sellProgress! >= (p.gangMission.sellTarget || 0)) {
           p.gangRelations = { ...p.gangRelations, [p.gangMission.gangId]: (p.gangRelations[p.gangMission.gangId] ?? 0) + 6 };
+          p.gangRelations = applyRivalSpillover(p.gangRelations, p.gangMission.gangId, 6);
           p.rep += 5;
           // Damage target gang relations
           const targetGang = GANGS.find(x => x.turf.includes(p.gangMission!.targetLocation!));
           if (targetGang) p.gangRelations = { ...p.gangRelations, [targetGang.id]: (p.gangRelations[targetGang.id] ?? 0) - 8 };
           p.gangMissionsCompleted++;
+          // Persona mission: Connected — track per-gang mission completions (muscle)
+          if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'connected' && p.personaMission.gangMissionCounts) {
+            const pmGangId = p.gangMission!.gangId;
+            const counts = { ...p.personaMission.gangMissionCounts, [pmGangId]: (p.personaMission.gangMissionCounts[pmGangId] || 0) + 1 };
+            const maxCount = Math.max(...Object.values(counts));
+            p.personaMission = { ...p.personaMission, gangMissionCounts: counts, progress: maxCount };
+            if (maxCount >= p.personaMission.target) {
+              p.personaMission = { ...p.personaMission, completed: true, rewardApplied: true };
+              for (const gid of Object.keys(p.gangRelations)) { p.gangRelations[gid] = Math.min(40, (p.gangRelations[gid] ?? 0) + 5); }
+              if (!p.territories[p.location]) { p.territories = { ...p.territories, [p.location]: { tribute: R(200, 400), acquiredDay: p.day, stash: {} } }; }
+            }
+          }
           p.eventLog = [...p.eventLog, { day: p.day, message: `🎖️ Muscle mission complete! Caused enough trouble.`, type: 'mission' as const }];
           p.gangMission = null;
         }
@@ -960,8 +1179,9 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
       effects.push({ type: 'sfx', sound: 'miss' }, { type: 'haptic', style: 'warning' });
     }
     p.trades++;
-    // Sell heat: ceil(rev / 20000) capped at 12 + persona
-    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(12, Math.ceil(rev / 20000)) * tMods.heatGainMultiplier));
+    // Sell heat: ceil(rev / 20000) capped at 12 + persona (Housewife reward: 0.4x heat)
+    const housewifeHeatMult = (p.personaMission?.personaId === 'housewife' && p.personaMission.completed && p.personaMission.rewardApplied) ? 0.4 : 1;
+    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(12, Math.ceil(rev / 20000)) * tMods.heatGainMultiplier * housewifeHeatMult));
 
     // Track recent trades for price memory
     const sellRegion = getRegionForLocation(p.location)?.id || 'nyc';
@@ -1036,10 +1256,21 @@ export function copAction(player: PlayerState, action: 'run' | 'fight' | 'bribe'
   } else if (action === 'fight') {
     // Multi-round: resolve ONE cop per round
     let killChance = (p.gun ? 0.45 : 0.15) + cMods.copFightKillBonus;
+    // Persona mission: Enforcer reward — +15% fight win chance
+    if (p.personaMission?.personaId === 'enforcer' && p.personaMission.completed && p.personaMission.rewardApplied) {
+      killChance += 0.15;
+    }
     let dmMin = p.gun ? 5 : 12;
     let dmMax = p.gun ? 15 : 30;
     if (law.behavior === 'corrupt') { dmMin = Math.max(1, dmMin - 3); dmMax -= 5; }
     if (law.behavior === 'methodical') { killChance -= 0.05; dmMin += 3; dmMax += 5; }
+    // Blood Brother fight bonus
+    const localGangForFight = GANGS.find(g => g.turf.includes(p.location));
+    if (localGangForFight && getGangFavorTier(p.gangRelations[localGangForFight.id] ?? 0) >= 3) {
+      if (localGangForFight.bloodBrotherPerk.type === 'fightBonus') {
+        killChance += localGangForFight.bloodBrotherPerk.value;
+      }
+    }
 
     const roundNum = (c.roundsCompleted || 0) + 1;
 
@@ -1050,6 +1281,15 @@ export function copAction(player: PlayerState, action: 'run' | 'fight' | 'bribe'
       p.rep += 8;
       if (law.behavior === 'brutal') p.rep += 3;
       p.closeCallCount++;
+      // Persona mission: Enforcer — count fight wins
+      if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'enforcer') {
+        const newProg = p.personaMission.progress + 1;
+        if (newProg >= p.personaMission.target) {
+          p.personaMission = { ...p.personaMission, progress: newProg, completed: true, rewardApplied: true };
+        } else {
+          p.personaMission = { ...p.personaMission, progress: newProg };
+        }
+      }
       effects.push({ type: 'shake' });
 
       if (newCount <= 0) {
@@ -1156,6 +1396,7 @@ export function handleOffer(player: PlayerState, accept: boolean): { player: Pla
     };
     // Relation boost for trust
     p.gangRelations = { ...p.gangRelations, [o.gangId!]: (p.gangRelations[o.gangId!] ?? 0) + 3 };
+    p.gangRelations = applyRivalSpillover(p.gangRelations, o.gangId!, 3);
     p.eventLog = [...p.eventLog, {
       day: p.day,
       message: `☠️ Took ${o.quantity} ${drug.emoji} ${drug.name} from ${gang.name}. Owe $${o.amountOwed!.toLocaleString()} in ${CONSIGNMENT_TURNS} turns.`,
@@ -1169,8 +1410,21 @@ export function handleOffer(player: PlayerState, accept: boolean): { player: Pla
       if (p.cash >= o.mission.cashAmount) {
         p.cash -= o.mission.cashAmount;
         p.gangRelations = { ...p.gangRelations, [o.gangId!]: (p.gangRelations[o.gangId!] ?? 0) + 4 };
+        p.gangRelations = applyRivalSpillover(p.gangRelations, o.gangId!, 4);
         p.rep += 2;
         p.gangMissionsCompleted++;
+        // Persona mission: Connected — track per-gang mission completions (tribute)
+        if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'connected' && p.personaMission.gangMissionCounts) {
+          const pmGangId = o.gangId!;
+          const counts = { ...p.personaMission.gangMissionCounts, [pmGangId]: (p.personaMission.gangMissionCounts[pmGangId] || 0) + 1 };
+          const maxCount = Math.max(...Object.values(counts));
+          p.personaMission = { ...p.personaMission, gangMissionCounts: counts, progress: maxCount };
+          if (maxCount >= p.personaMission.target) {
+            p.personaMission = { ...p.personaMission, completed: true, rewardApplied: true };
+            for (const gid of Object.keys(p.gangRelations)) { p.gangRelations[gid] = Math.min(40, (p.gangRelations[gid] ?? 0) + 5); }
+            if (!p.territories[p.location]) { p.territories = { ...p.territories, [p.location]: { tribute: R(200, 400), acquiredDay: p.day, stash: {} } }; }
+          }
+        }
         p.eventLog = [...p.eventLog, { day: p.day, message: `🎖️ Paid tribute to ${gang.name}. Respect earned.`, type: 'mission' as const }];
         effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
       }
@@ -1360,15 +1614,27 @@ export function generateConsignmentOffer(player: PlayerState, location: string):
   const region = getRegionForLocation(location);
   if (!region) return null;
 
-  // Weight toward expensive drugs (exclude rare)
-  const normalDrugs = DRUGS.filter(d => !d.rare);
-  const weights = normalDrugs.map(d => ({ drug: d, weight: d.tier * d.tier }));
-  const totalWeight = weights.reduce((s, w) => s + w.weight, 0);
-  let roll = Math.random() * totalWeight;
-  let picked = weights[0].drug;
-  for (const w of weights) {
-    roll -= w.weight;
-    if (roll <= 0) { picked = w.drug; break; }
+  // Weight toward gang specialty (70% chance), fallback to tier-weighted random
+  let picked: typeof DRUGS[0];
+  if (gang.specialty && gang.specialty.length > 0 && C(0.70)) {
+    const specialtyDrugs = DRUGS.filter(d => gang.specialty.includes(d.id) && !d.rare);
+    if (specialtyDrugs.length > 0) {
+      picked = specialtyDrugs[R(0, specialtyDrugs.length - 1)];
+    } else {
+      const normalDrugs = DRUGS.filter(d => !d.rare);
+      const weights = normalDrugs.map(d => ({ drug: d, weight: d.tier * d.tier }));
+      const totalWeight = weights.reduce((s, w) => s + w.weight, 0);
+      let roll = Math.random() * totalWeight;
+      picked = weights[0].drug;
+      for (const w of weights) { roll -= w.weight; if (roll <= 0) { picked = w.drug; break; } }
+    }
+  } else {
+    const normalDrugs = DRUGS.filter(d => !d.rare);
+    const weights = normalDrugs.map(d => ({ drug: d, weight: d.tier * d.tier }));
+    const totalWeight = weights.reduce((s, w) => s + w.weight, 0);
+    let roll = Math.random() * totalWeight;
+    picked = weights[0].drug;
+    for (const w of weights) { roll -= w.weight; if (roll <= 0) { picked = w.drug; break; } }
   }
 
   // Quantity based on tier (L3 campaign: +50%)
@@ -1538,13 +1804,26 @@ export function bountyHunterAction(player: PlayerState, action: 'pay' | 'fight' 
   } else if (action === 'fight') {
     // Harder than cops: gun = 35% kill chance, no gun = 10% (+ persona bonus)
     const bhMods = getPersonaModifiers(p.personaId);
-    const killChance = (p.gun ? 0.35 : 0.10) + bhMods.copFightKillBonus;
+    let killChance = (p.gun ? 0.35 : 0.10) + bhMods.copFightKillBonus;
+    // Persona mission: Enforcer reward — +15% fight win chance
+    if (p.personaMission?.personaId === 'enforcer' && p.personaMission.completed && p.personaMission.rewardApplied) {
+      killChance += 0.15;
+    }
     if (C(killChance)) {
       // Win — bounty hunter gone, but consignment still active (just safe for a while)
       // We mark turnsLeft to give 3 turns of breathing room
       p.consignment = { ...con, turnsLeft: 3 }; // grace turns before overdue again
       p.heat = Math.min(HEAT_CAP, p.heat + 12);
       p.rep += 10;
+      // Persona mission: Enforcer — count fight wins
+      if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'enforcer') {
+        const newProg = p.personaMission.progress + 1;
+        if (newProg >= p.personaMission.target) {
+          p.personaMission = { ...p.personaMission, progress: newProg, completed: true, rewardApplied: true };
+        } else {
+          p.personaMission = { ...p.personaMission, progress: newProg };
+        }
+      }
       p.eventLog = [...p.eventLog, { day: p.day, message: `Fought off ${gangName}'s bounty hunter! They'll be back...`, type: 'consignment' as const }];
     } else {
       // Lose — finger + HP + they take some goods
@@ -1772,12 +2051,25 @@ export function gangCollectorAction(player: PlayerState, action: 'pay' | 'fight'
     p.gangRelations = { ...p.gangRelations, [loan.gangId]: (p.gangRelations[loan.gangId] ?? 0) - 2 };
     p.eventLog = [...p.eventLog, { day: p.day, message: `💸 Paid off ${gangName}'s collector. Debt settled.`, type: 'gangLoan' as const }];
   } else if (action === 'fight') {
-    const killChance = (p.gun ? 0.30 : 0.10) + cMods.copFightKillBonus;
+    let killChance = (p.gun ? 0.30 : 0.10) + cMods.copFightKillBonus;
+    // Persona mission: Enforcer reward — +15% fight win chance
+    if (p.personaMission?.personaId === 'enforcer' && p.personaMission.completed && p.personaMission.rewardApplied) {
+      killChance += 0.15;
+    }
     if (C(killChance)) {
       // Win — 2 turn grace
       p.gangLoan = { ...loan, turnsLeft: 2 };
       p.heat = Math.min(HEAT_CAP, p.heat + 8);
       p.rep += 5;
+      // Persona mission: Enforcer — count fight wins
+      if (p.personaMission && !p.personaMission.completed && !p.personaMission.failed && p.personaMission.personaId === 'enforcer') {
+        const newProg = p.personaMission.progress + 1;
+        if (newProg >= p.personaMission.target) {
+          p.personaMission = { ...p.personaMission, progress: newProg, completed: true, rewardApplied: true };
+        } else {
+          p.personaMission = { ...p.personaMission, progress: newProg };
+        }
+      }
       p.eventLog = [...p.eventLog, { day: p.day, message: `Fought off ${gangName}'s collector! They'll be back...`, type: 'gangLoan' as const }];
     } else {
       // Lose

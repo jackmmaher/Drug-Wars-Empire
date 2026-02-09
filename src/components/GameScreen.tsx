@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useGameStore } from '../stores/gameStore';
-import { getRegionForLocation } from '../constants/game';
+import { getRegionForLocation, LOCATIONS } from '../constants/game';
 import type { TabId } from '../types/game';
 import { GameHeader } from './GameHeader';
 import { MarketTab } from './MarketTab';
@@ -37,6 +37,22 @@ export function GameScreen() {
   const campaign = useGameStore(s => s.campaign);
   const phase = useGameStore(s => s.phase);
   const subPanel = useGameStore(s => s.subPanel);
+
+  // Arrival text display
+  const prevLocationRef = useRef(player.location);
+  const [arrivalText, setArrivalText] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    if (prevLocationRef.current === player.location) return;
+    prevLocationRef.current = player.location;
+    const loc = LOCATIONS.find(l => l.id === player.location);
+    if (loc?.arrivalText) {
+      setArrivalText(loc.arrivalText);
+      const timer = setTimeout(() => setArrivalText(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [player.location, phase]);
 
   // Progressive tooltip triggers
   useEffect(() => {
@@ -96,6 +112,20 @@ export function GameScreen() {
 
       <View style={{ flex: 1, maxWidth: 1100, width: '100%', alignSelf: 'center', paddingHorizontal: 8 }}>
         <GameHeader />
+
+        {/* Arrival text banner */}
+        {arrivalText && (
+          <View style={{
+            marginHorizontal: 8, marginBottom: 4,
+            backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 6,
+            borderLeftWidth: 3, borderLeftColor: colors.textDark,
+            paddingVertical: 6, paddingHorizontal: 12,
+          }}>
+            <Text style={{ fontSize: 12, color: colors.textDark, fontStyle: 'italic' }}>
+              {arrivalText}
+            </Text>
+          </View>
+        )}
 
         {/* Tooltip banner */}
         {activeTooltip && TOOLTIP_MESSAGES[activeTooltip] && (

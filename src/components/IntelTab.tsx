@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled, isRegionAvailable, LEVEL_CONFIGS, REGIONS, getRegionForLocation } from '../constants/game';
+import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled, isRegionAvailable, LEVEL_CONFIGS, REGIONS, getRegionForLocation, PERSONAS } from '../constants/game';
+import type { Gang } from '../types/game';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
 
@@ -13,18 +14,18 @@ function getFavorLabel(rel: number): { label: string; color: string } {
   return { label: 'Hostile', color: '#ef4444' };
 }
 
-function getFavorPerks(tier: number): string[] {
+function getFavorPerks(tier: number, gang?: Gang): string[] {
   const perks: string[] = [];
   if (tier >= 1) perks.push('10% off consignment');
   if (tier >= 2) perks.push('-5% cop encounters', '+$3K loan cap');
-  if (tier >= 3) perks.push('No mugging on turf', '+10% sell price');
+  if (tier >= 3) perks.push(gang?.bloodBrotherPerk?.label || '+10% sell price');
   return perks;
 }
 
-function getNextFavorMilestone(rel: number): { needed: number; tierName: string; perk: string } | null {
+function getNextFavorMilestone(rel: number, gang?: Gang): { needed: number; tierName: string; perk: string } | null {
   if (rel < FAVOR_FRIENDLY) return { needed: FAVOR_FRIENDLY - rel, tierName: 'Friendly', perk: '10% off consignment' };
   if (rel < FAVOR_TRUSTED) return { needed: FAVOR_TRUSTED - rel, tierName: 'Trusted', perk: '-5% cops, +$3K loans' };
-  if (rel < FAVOR_BLOOD) return { needed: FAVOR_BLOOD - rel, tierName: 'Blood Brother', perk: 'no mugging, +10% sell' };
+  if (rel < FAVOR_BLOOD) return { needed: FAVOR_BLOOD - rel, tierName: 'Blood Brother', perk: gang?.bloodBrotherPerk?.label || '+10% sell' };
   return null;
 }
 
@@ -186,6 +187,39 @@ export function IntelTab() {
           <Text style={{ fontSize: 14, color: colors.textDark, padding: 10 }}>No informant yet.</Text>
         )}
       </Section>
+
+      {/* Persona Mission */}
+      {cp.personaMission && (() => {
+        const pm = cp.personaMission!;
+        const persona = PERSONAS.find(p => p.id === pm.personaId);
+        return (
+          <Section title="PERSONA MISSION" defaultOpen={!pm.completed}>
+            <View style={{
+              backgroundColor: pm.completed ? 'rgba(34,197,94,0.06)' : pm.failed ? 'rgba(239,68,68,0.04)' : 'rgba(168,85,247,0.04)',
+              borderWidth: 1,
+              borderColor: pm.completed ? 'rgba(34,197,94,0.15)' : pm.failed ? 'rgba(239,68,68,0.12)' : 'rgba(168,85,247,0.12)',
+              borderRadius: 8, padding: 10,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Text style={{ fontSize: 16 }}>{persona?.emoji || '🎯'}</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: pm.completed ? colors.green : pm.failed ? colors.red : colors.purpleLight }}>
+                  {pm.name}
+                </Text>
+                {pm.completed && <Text style={{ fontSize: 14, color: colors.green }}>COMPLETE</Text>}
+                {pm.failed && <Text style={{ fontSize: 14, color: colors.red }}>FAILED</Text>}
+              </View>
+              <Text style={{ fontSize: 13, color: colors.textDim, marginBottom: 4 }}>{pm.description}</Text>
+              {!pm.completed && !pm.failed && (
+                <Bar percent={Math.min(100, (pm.progress / pm.target) * 100)}
+                  color={colors.purpleDark} label={`${pm.personaId === 'housewife' ? $(pm.progress) : pm.progress}/${pm.personaId === 'housewife' ? $(pm.target) : pm.target}`} />
+              )}
+              <Text style={{ fontSize: 12, color: pm.completed ? colors.green : colors.textMuted, marginTop: 4 }}>
+                Reward: {pm.rewardDescription}
+              </Text>
+            </View>
+          </Section>
+        );
+      })()}
 
       {/* Consignment */}
       {cp.consignment && (() => {
@@ -439,9 +473,9 @@ export function IntelTab() {
                 const rel = cp.gangRelations[g.id] ?? 0;
                 const tier = getGangFavorTier(rel);
                 const { label, color: favorColor } = getFavorLabel(rel);
-                const perks = getFavorPerks(tier);
+                const perks = getFavorPerks(tier, g);
                 const barPercent = Math.max(0, Math.min(100, ((rel + 30) / 55) * 100));
-                const nextMilestone = getNextFavorMilestone(rel);
+                const nextMilestone = getNextFavorMilestone(rel, g);
                 const onTheirTurf = g.turf.includes(cp.location);
                 const isAtWar = campaign.gangWar.activeWar?.targetGangId === g.id;
                 const isDefeated = campaign.gangWar.defeatedGangs.includes(g.id);
@@ -460,6 +494,7 @@ export function IntelTab() {
                       <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 15, fontWeight: '700', color: g.color }}>{g.name}</Text>
+                        <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic' }}>"{g.leader}"</Text>
                         <Text style={{ fontSize: 12, color: colors.textMuted }}>
                           Turf: {g.turf.map(t => LOCATIONS.find(l => l.id === t)?.name || t).join(', ')}
                         </Text>
@@ -470,6 +505,21 @@ export function IntelTab() {
                         </Text>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: favorColor }}>{label}</Text>
                       </View>
+                    </View>
+                    <Text style={{ fontSize: 11, color: colors.textDim, marginBottom: 3 }}>{g.description}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 3 }}>
+                      {g.specialty.map(sId => {
+                        const sDrug = DRUGS.find(d => d.id === sId);
+                        return sDrug ? (
+                          <Text key={sId} style={{ fontSize: 11, color: colors.textMuted }}>{sDrug.emoji} {sDrug.name}</Text>
+                        ) : null;
+                      })}
+                      {(() => {
+                        const rivalGang = GANGS.find(rg => rg.id === g.rival);
+                        return rivalGang ? (
+                          <Text style={{ fontSize: 11, color: colors.red }}>Rival: {rivalGang.emoji} {rivalGang.name}</Text>
+                        ) : null;
+                      })()}
                     </View>
                     <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
                       <View style={{ height: '100%', width: `${barPercent}%`, backgroundColor: favorColor, borderRadius: 2 }} />
