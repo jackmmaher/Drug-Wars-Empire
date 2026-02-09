@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { colors } from '../constants/theme';
 import { $, GANGS, DRUGS, REGIONS, LOCATIONS, getRegionForLocation, getRegionLocations } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
+import { inventoryCount } from '../lib/game-logic';
 
 export function MapTab() {
   const cp = useGameStore(s => s.currentPlayer());
@@ -14,6 +15,9 @@ export function MapTab() {
   const currentRegion = getRegionForLocation(cp.location);
   const regionLocs = currentRegion ? getRegionLocations(currentRegion.id) : [];
   const otherRegions = REGIONS.filter(r => r.id !== currentRegion?.id);
+  const carryingUnits = inventoryCount(cp.inventory);
+  const conOrigin = cp.consignment?.originLocation;
+  const conOverdue = cp.consignment && cp.consignment.turnsLeft <= 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -33,10 +37,11 @@ export function MapTab() {
               disabled={cur}
               style={[
                 styles.locBtn,
-                { borderColor: cur ? l.color + '35' : own ? '#22c55e22' : l.color + '12' },
+                { borderColor: cur ? l.color + '35' : own ? '#22c55e22' : conOrigin === l.id ? (conOverdue ? '#ef444440' : '#eab30840') : l.color + '12' },
                 cur && { backgroundColor: l.color + '15' },
                 own && !cur && { backgroundColor: 'rgba(34,197,94,0.04)' },
-                !cur && !own && { backgroundColor: l.color + '06' },
+                conOrigin === l.id && !cur && { backgroundColor: conOverdue ? 'rgba(239,68,68,0.06)' : 'rgba(234,179,8,0.06)' },
+                !cur && !own && conOrigin !== l.id && { backgroundColor: l.color + '06' },
                 cur && { opacity: 0.5 },
               ]}
               activeOpacity={0.7}
@@ -45,6 +50,9 @@ export function MapTab() {
               <Text style={[styles.locName, cur && { color: l.color, fontWeight: '800' }]}>{l.name}</Text>
               {own && <Text style={styles.ownedLabel}>🏴 Yours</Text>}
               {g && !own && <Text style={[styles.gangLabel, { color: g.color }]}>{g.emoji}</Text>}
+              {conOrigin === l.id && (
+                <Text style={[styles.returnLabel, conOverdue && { color: colors.red }]}>📍 Return here</Text>
+              )}
               {l.bank && <Text style={styles.serviceLabel}>🏦🦈</Text>}
             </TouchableOpacity>
           );
@@ -59,11 +67,18 @@ export function MapTab() {
           const flyCost = isNyc ? Math.round((currentRegion?.flyCost || 0) / 2) : r.flyCost;
           const repNeeded = isNyc ? 0 : r.rep;
           const ok = cp.rep >= repNeeded;
+
+          // Customs risk indicator
+          const customsRisk = carryingUnits > 0 ? Math.round(
+            Math.max(0.05, Math.min(0.75,
+              r.customsStrictness + carryingUnits * 0.002 + cp.heat * 0.002 - (cp.space > 100 ? 0.05 : 0)
+            )) * 100
+          ) : 0;
+
           return (
             <TouchableOpacity
               key={r.id}
               onPress={() => {
-                // Travel to the first city in the target region
                 const targetLocs = getRegionLocations(r.id);
                 if (targetLocs.length > 0) travelAction(targetLocs[0].id);
               }}
@@ -90,6 +105,16 @@ export function MapTab() {
                   {Object.entries(r.priceMultipliers).map(([d, m]) =>
                     `${DRUGS.find(x => x.id === d)?.emoji}${Math.round((1 - m) * 100)}%↓`
                   ).join(' ')}
+                </Text>
+              )}
+              {ok && carryingUnits > 0 && (
+                <Text style={[styles.customsLabel, {
+                  color: customsRisk >= 50 ? colors.red : customsRisk >= 30 ? colors.yellow : colors.textMuted,
+                }]}>
+                  🛃 {customsRisk}% risk
+                  {r.contraband.length > 0 && (
+                    ` • ${r.contraband.map(id => DRUGS.find(d => d.id === id)?.emoji || '').join('')} 2x`
+                  )}
                 </Text>
               )}
             </TouchableOpacity>
@@ -151,6 +176,8 @@ const styles = StyleSheet.create({
   lockedLabel: { fontSize: 7, color: colors.textDark },
   flyCostLabel: { fontSize: 7, color: colors.textMuted },
   discountLabel: { fontSize: 6, color: colors.textDark },
+  customsLabel: { fontSize: 6, fontWeight: '600', marginTop: 1 },
+  returnLabel: { fontSize: 6, fontWeight: '700', color: colors.yellow },
   endTurnBtn: {
     backgroundColor: colors.indigo,
     borderRadius: 6,

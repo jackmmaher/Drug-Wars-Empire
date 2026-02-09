@@ -1,13 +1,16 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, GANGS, MILESTONES, LOCATIONS } from '../constants/game';
+import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
 
 export function IntelTab() {
   const cp = useGameStore(s => s.currentPlayer());
   const payRatAction = useGameStore(s => s.payRat);
+
+  const pendingTip = cp.rat.pendingTip;
+  const tipDrug = pendingTip ? DRUGS.find(d => d.id === pendingTip.drugId) : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -30,6 +33,25 @@ export function IntelTab() {
           <Text style={styles.ratInfo}>
             Intel: {'⭐'.repeat(cp.rat.intel)} • Tips: {cp.rat.tips}
           </Text>
+
+          {/* Pending Tip */}
+          {pendingTip && tipDrug && (
+            <View style={styles.tipPanel}>
+              <Text style={styles.tipHeader}>🐀 {cp.rat.name} says:</Text>
+              <Text style={styles.tipText}>
+                "{tipDrug.emoji} {tipDrug.name} gonna {pendingTip.direction === 'spike' ? 'explode' : 'crash'} soon..."
+              </Text>
+              <View style={styles.tipMeta}>
+                <Text style={styles.tipConfidence}>
+                  {'⭐'.repeat(pendingTip.confidence)} {pendingTip.confidence >= 3 ? 'HIGH' : pendingTip.confidence >= 2 ? 'MED' : 'LOW'}
+                </Text>
+                <Text style={styles.tipTurns}>
+                  ~{pendingTip.turnsUntil > 0 ? `${pendingTip.turnsUntil} turn${pendingTip.turnsUntil > 1 ? 's' : ''}` : 'now!'}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {cp.rat.loyalty < 40 && (
             <Text style={styles.ratWarning}>⚠️ Might flip!</Text>
           )}
@@ -38,13 +60,51 @@ export function IntelTab() {
             onPress={payRatAction}
             disabled={cp.cash < 150}
           >
-            <Text style={styles.payRatText}>💰 Pay ($150)</Text>
+            <Text style={styles.payRatText}>💰 Pay ($150){!pendingTip ? ' — may get intel' : ''}</Text>
           </TouchableOpacity>
         </View>
       ) : cp.rat.hired ? (
         <Text style={styles.ratDead}>💀 {cp.rat.name} sold you out.</Text>
       ) : (
         <Text style={styles.noRat}>No informant yet.</Text>
+      )}
+
+      {/* Consignment */}
+      {cp.consignment && (() => {
+        const con = cp.consignment!;
+        const conGang = GANGS.find(g => g.id === con.gangId);
+        const conDrug = DRUGS.find(d => d.id === con.drugId);
+        const conLoc = LOCATIONS.find(l => l.id === con.originLocation);
+        return (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 6 }]}>🤝 CONSIGNMENT</Text>
+            <View style={styles.consignmentPanel}>
+              <Text style={styles.consignmentRow}>Owe: {conGang?.emoji} {conGang?.name}</Text>
+              <Text style={styles.consignmentRow}>Drug: {conDrug?.emoji} {conDrug?.name} ({con.quantity} units)</Text>
+              <Text style={styles.consignmentRow}>Debt: {$(con.amountOwed)} ({$(con.amountPaid)} paid)</Text>
+              <Text style={[styles.consignmentRow, {
+                color: con.turnsLeft <= 1 ? colors.red : con.turnsLeft <= 2 ? colors.yellow : colors.textDim,
+              }]}>
+                Deadline: {con.turnsLeft > 0 ? `${con.turnsLeft} turn${con.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'}
+              </Text>
+              <Text style={styles.consignmentRow}>Return to: {conLoc?.emoji} {conLoc?.name}</Text>
+            </View>
+          </>
+        );
+      })()}
+
+      {/* Fingers */}
+      {cp.fingers < 10 && (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 6 }]}>✋ FINGERS</Text>
+          <Text style={[styles.fingerText, {
+            color: cp.fingers <= 4 ? colors.red : cp.fingers <= 6 ? colors.yellow : colors.orangeLight,
+          }]}>
+            {cp.fingers}/10 remaining • -{(10 - cp.fingers) * 5} space • -{(10 - cp.fingers) * 3}% sell value
+            {cp.fingers <= 6 ? ' • +1 travel day' : ''}
+            {cp.fingers <= 4 ? ' • Can\'t hold a gun' : ''}
+          </Text>
+        </>
       )}
 
       {/* Territories */}
@@ -104,6 +164,7 @@ export function IntelTab() {
                 : e.type === 'spike' ? colors.pinkLight
                 : e.type === 'crash' ? colors.greenLight
                 : e.type === 'tip' ? colors.purpleLight
+                : e.type === 'customs' ? colors.orangeLight
                 : colors.textMuted,
               opacity: 1 - i * 0.06,
             },
@@ -141,6 +202,19 @@ const styles = StyleSheet.create({
   ratName: { fontSize: 11, fontWeight: '700', color: colors.purpleLight },
   ratLoyalty: { fontSize: 9 },
   ratInfo: { fontSize: 8, color: colors.textMuted, marginVertical: 2 },
+  tipPanel: {
+    backgroundColor: 'rgba(124,58,237,0.08)',
+    borderRadius: 4,
+    padding: 5,
+    marginVertical: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.18)',
+  },
+  tipHeader: { fontSize: 9, fontWeight: '700', color: colors.purpleLight, marginBottom: 2 },
+  tipText: { fontSize: 10, color: colors.purpleLight, fontStyle: 'italic' },
+  tipMeta: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
+  tipConfidence: { fontSize: 8, color: colors.yellow, fontWeight: '600' },
+  tipTurns: { fontSize: 8, color: colors.textMuted },
   ratWarning: { fontSize: 9, color: colors.red, fontWeight: '600' },
   payRatBtn: {
     backgroundColor: '#6d28d9',
@@ -184,4 +258,13 @@ const styles = StyleSheet.create({
   milestoneInactive: { opacity: 0.1 },
   logContainer: { maxHeight: 120 },
   logEntry: { fontSize: 9, paddingVertical: 1 },
+  consignmentPanel: {
+    backgroundColor: 'rgba(234,179,8,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(234,179,8,0.12)',
+    borderRadius: 5,
+    padding: 6,
+  },
+  consignmentRow: { fontSize: 10, color: colors.textDim, paddingVertical: 1 },
+  fingerText: { fontSize: 9, paddingHorizontal: 6, paddingVertical: 2 },
 });

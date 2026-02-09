@@ -3,17 +3,17 @@ import { useState, useEffect, useCallback, useRef } from "react";
 /*
 ══════════════════════════════════════════════════════════════
   DRUG WARS: EMPIRE — NEUROCHEMICAL EDITION
-  
+
   DOPAMINE: Variable-ratio rewards, near-misses, streaks,
             price spikes you ALMOST caught, escalating multipliers,
             "just one more turn" compulsion loops
-            
+
   SEROTONIN: Territory ownership, reputation rank progression,
              tribute income, status symbols, milestone collection
-             
+
   OXYTOCIN: Informant relationship/loyalty, gang alliances,
             2P shared-screen betrayal tension, protecting your rat
-            
+
   ENDORPHIN: Screen shake, close escapes, health-danger zone,
              cop shootouts, near-death survival, loss aversion
 ══════════════════════════════════════════════════════════════
@@ -38,6 +38,9 @@ const SFX = {
 // ── CONFIG ─────────────────────────────────────────────────
 const DAYS = 30, CASH0 = 2000, DEBT0 = 5500, SPACE0 = 100;
 const DINT = 0.10, BINT = 0.05;
+const HEAT_CAP = 100;
+const CONSIGNMENT_TURNS = 5;
+const CONSIGNMENT_MARKUP = 2.0;
 const R = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
 const C = p => Math.random()<p;
 const $ = n => { if(n<0)return`-${$(-n)}`; if(n>=1e6)return`$${(n/1e6).toFixed(2)}M`; if(n>=1e4)return`$${(n/1e3).toFixed(1)}K`; return`$${n.toLocaleString()}`; };
@@ -53,11 +56,11 @@ const DRUGS = [
 ];
 
 const REGIONS = [
-  { id:"nyc",name:"New York",em:"🗽",c:"#ef4444",rep:0,fly:0,td:0,pm:{} },
-  { id:"colombia",name:"Colombia",em:"🇨🇴",c:"#dc2626",rep:30,fly:3000,td:2,pm:{cocaine:0.3,heroin:0.8} },
-  { id:"netherlands",name:"Netherlands",em:"🇳🇱",c:"#f97316",rep:50,fly:5000,td:2,pm:{ecstasy:0.35,weed:0.4,acid:0.5} },
-  { id:"thailand",name:"Thailand",em:"🇹🇭",c:"#14b8a6",rep:40,fly:4000,td:2,pm:{heroin:0.3,speed:0.35} },
-  { id:"france",name:"France",em:"🇫🇷",c:"#6366f1",rep:60,fly:4500,td:2,pm:{heroin:0.45,cocaine:0.65} },
+  { id:"nyc",name:"New York",em:"🗽",c:"#ef4444",rep:0,fly:0,td:0,pm:{},law:{fn:"NYPD",fe:"🚔",bm:1.0,ab:0,hdb:0,em2:0,bh:"brutal"},cs:0.35,cb:["cocaine","heroin"] },
+  { id:"colombia",name:"Colombia",em:"🇨🇴",c:"#dc2626",rep:30,fly:3000,td:2,pm:{cocaine:0.3,heroin:0.8},law:{fn:"Policia Nacional",fe:"🇨🇴",bm:0.5,ab:-1,hdb:3,em2:-0.05,bh:"corrupt"},cs:0.15,cb:["heroin"] },
+  { id:"netherlands",name:"Netherlands",em:"🇳🇱",c:"#f97316",rep:50,fly:5000,td:2,pm:{ecstasy:0.35,weed:0.4,acid:0.5},law:{fn:"Politie",fe:"🇳🇱",bm:1.8,ab:-1,hdb:5,em2:-0.08,bh:"methodical"},cs:0.25,cb:["ecstasy","weed","acid"] },
+  { id:"thailand",name:"Thailand",em:"🇹🇭",c:"#14b8a6",rep:40,fly:4000,td:2,pm:{heroin:0.3,speed:0.35},law:{fn:"Royal Thai Police",fe:"🇹🇭",bm:0.6,ab:0,hdb:2,em2:0,bh:"corrupt"},cs:0.30,cb:["heroin","speed"] },
+  { id:"france",name:"France",em:"🇫🇷",c:"#6366f1",rep:60,fly:4500,td:2,pm:{heroin:0.45,cocaine:0.65},law:{fn:"Gendarmerie",fe:"🇫🇷",bm:1.5,ab:1,hdb:1,em2:0.03,bh:"methodical"},cs:0.40,cb:["cocaine","heroin"] },
 ];
 
 const NYC = [
@@ -122,22 +125,42 @@ const RANKS = [
 ];
 
 const EVTS = [
-  {m:"Cops busted a cocaine shipment! Prices skyrocketed!",d:"cocaine",x:4,t:"spike"},
-  {m:"Addicts buying coke at insane prices!",d:"cocaine",x:7,t:"spike"},
-  {m:"Colombian freighter unloaded cheap coke!",d:"cocaine",x:0.3,t:"crash"},
-  {m:"Heroin bust! Supply dried up!",d:"heroin",x:4,t:"spike"},
-  {m:"Junkies desperate — heroin prices insane!",d:"heroin",x:7,t:"spike"},
-  {m:"Cheap heroin flooding in from overseas!",d:"heroin",x:0.35,t:"crash"},
-  {m:"Acid factory raided! Prices soaring!",d:"acid",x:4,t:"spike"},
-  {m:"Market flooded with cheap acid!",d:"acid",x:0.25,t:"crash"},
-  {m:"Weed drought — prices skyrocketed!",d:"weed",x:3.5,t:"spike"},
-  {m:"Dealers dumping weed everywhere!",d:"weed",x:0.25,t:"crash"},
-  {m:"Speed addicts paying premium!",d:"speed",x:5,t:"spike"},
-  {m:"Cheap speed flooding the streets!",d:"speed",x:0.2,t:"crash"},
-  {m:"Quaalude factory raided!",d:"ludes",x:6,t:"spike"},
-  {m:"Ludes dirt cheap everywhere!",d:"ludes",x:0.15,t:"crash"},
-  {m:"Rave scene exploded — ecstasy demand insane!",d:"ecstasy",x:5,t:"spike"},
-  {m:"Dutch ecstasy shipment arrived — dirt cheap!",d:"ecstasy",x:0.3,t:"crash"},
+  // Global
+  {m:"Cops busted a shipment! Prices skyrocketed!",d:"cocaine",x:4,t:"spike",rid:null},
+  {m:"Cheap heroin flooding in from overseas!",d:"heroin",x:0.35,t:"crash",rid:null},
+  {m:"Acid factory raided! Prices soaring!",d:"acid",x:4,t:"spike",rid:null},
+  {m:"Market flooded with cheap acid!",d:"acid",x:0.25,t:"crash",rid:null},
+  {m:"Weed drought — prices skyrocketed!",d:"weed",x:3.5,t:"spike",rid:null},
+  {m:"Dealers dumping weed everywhere!",d:"weed",x:0.25,t:"crash",rid:null},
+  {m:"Quaalude factory raided!",d:"ludes",x:6,t:"spike",rid:null},
+  {m:"Ludes dirt cheap everywhere!",d:"ludes",x:0.15,t:"crash",rid:null},
+  // NYC
+  {m:"DEA raid in the Bronx! Heroin supply dried up!",d:"heroin",x:4,t:"spike",rid:"nyc"},
+  {m:"Wall Street party weekend — cocaine demand insane!",d:"cocaine",x:6,t:"spike",rid:"nyc"},
+  {m:"Junkies desperate in the subway — heroin prices insane!",d:"heroin",x:7,t:"spike",rid:"nyc"},
+  {m:"Colombian shipment arrives in NYC!",d:"cocaine",x:0.3,t:"crash",rid:"nyc"},
+  {m:"Dutch ecstasy floods the US market!",d:"ecstasy",x:0.3,t:"crash",rid:"nyc"},
+  {m:"Speed addicts paying premium in Brooklyn!",d:"speed",x:5,t:"spike",rid:"nyc"},
+  // Colombia
+  {m:"Cartel lab discovered — cocaine flooding streets!",d:"cocaine",x:0.2,t:"crash",rid:"colombia"},
+  {m:"Government airstrike on coca fields!",d:"cocaine",x:5,t:"spike",rid:"colombia"},
+  {m:"Rival cartel war — supply cut off!",d:"cocaine",x:4,t:"spike",rid:"colombia"},
+  {m:"New coca harvest — prices plummeting!",d:"cocaine",x:0.25,t:"crash",rid:"colombia"},
+  // Netherlands
+  {m:"Rave festival in Amsterdam — ecstasy demand insane!",d:"ecstasy",x:5,t:"spike",rid:"netherlands"},
+  {m:"Coffee shop surplus — weed dirt cheap!",d:"weed",x:0.2,t:"crash",rid:"netherlands"},
+  {m:"Dutch lab bust — ecstasy prices soaring!",d:"ecstasy",x:4,t:"spike",rid:"netherlands"},
+  {m:"Acid flooding Amsterdam clubs!",d:"acid",x:0.3,t:"crash",rid:"netherlands"},
+  // Thailand
+  {m:"Golden Triangle pipeline opened — cheap heroin!",d:"heroin",x:0.25,t:"crash",rid:"thailand"},
+  {m:"Thai police crackdown on ya ba!",d:"speed",x:5,t:"spike",rid:"thailand"},
+  {m:"Full moon party demand — ecstasy prices insane!",d:"ecstasy",x:5,t:"spike",rid:"thailand"},
+  {m:"Opium surplus from the hills!",d:"heroin",x:0.3,t:"crash",rid:"thailand"},
+  // France
+  {m:"Corsican connection intercepted!",d:"heroin",x:5,t:"spike",rid:"france"},
+  {m:"Marseille port smuggling ring busted!",d:"cocaine",x:4,t:"spike",rid:"france"},
+  {m:"Riviera party season — cocaine demand surging!",d:"cocaine",x:5,t:"spike",rid:"france"},
+  {m:"New pipeline from Morocco — cheap speed!",d:"speed",x:0.2,t:"crash",rid:"france"},
 ];
 
 const RATNAMES = ["Jimmy Two-Shoes","Skinny Pete","Maria Espinoza","Dice","Nails","Whisper","Tina Blade","Switchblade Sam"];
@@ -158,6 +181,9 @@ const MILES = [
   {id:"gun",cond:s=>s.gun,m:"Armed",e:"🔫"},
   {id:"big",cond:s=>s.best>=50000,m:"Big Score",e:"💥"},
   {id:"rat",cond:s=>s.rat.hired,m:"Connected",e:"🐀"},
+  {id:"smug",cond:s=>s.customsEvasions>=3,m:"Smuggler",e:"🧳"},
+  {id:"debtor",cond:s=>s.consignment===null&&s.fingers<10,m:"Scarred",e:"✂️"},
+  {id:"dealer",cond:s=>s.consignmentsCompleted>=1,m:"Deal Maker",e:"🤝"},
 ];
 
 function getRank(rep) { let r=RANKS[0]; for(const x of RANKS) if(rep>=x.r) r=x; return r; }
@@ -177,7 +203,7 @@ function genP(loc, ev) {
   return p;
 }
 
-function mkRat() { return {name:RATNAMES[R(0,RATNAMES.length-1)],pers:RATTYPES[R(0,3)],loy:50+R(-15,15),intel:R(1,3),alive:true,hired:false,cost:R(200,800),tips:0}; }
+function mkRat() { return {name:RATNAMES[R(0,RATNAMES.length-1)],pers:RATTYPES[R(0,3)],loy:50+R(-15,15),intel:R(1,3),alive:true,hired:false,cost:R(200,800),tips:0,pendingTip:null}; }
 
 function init(mode="solo") {
   const ev = C(0.35) ? EVTS[R(0,EVTS.length-1)] : null;
@@ -188,10 +214,80 @@ function init(mode="solo") {
     avg:{},terr:{},gang:Object.fromEntries(GANGS.map(g=>[g.id,0])),
     rat:mkRat(),ev:ev,evs:ev?[{d:1,m:ev.m,t:ev.t}]:[],
     nms:[],offer:null,cops:null,trib:0,intl:false,recentSold:[],
-    close:0,miles:[],newMile:null,
+    close:0,miles:[],newMile:null,customsEvasions:0,customsCaught:0,
+    consignment:null,fingers:10,consignmentsCompleted:0,
   });
   if(mode==="2p"){const ev2=C(0.35)?EVTS[R(0,EVTS.length-1)]:null;return {mode:"2p",phase:"title",turn:1,p1:{...base(),nm:"Player 1",pc:"#ef4444"},p2:{...base(),nm:"Player 2",pc:"#3b82f6",loc:"brooklyn",ev:ev2,evs:ev2?[{d:1,m:ev2.m,t:ev2.t}]:[],prices:genP("brooklyn",ev2)}};}
   return {mode:"solo",phase:"title",...base()};
+}
+
+function selectEvent(regionId, ratTip, baseChance) {
+  if(!C(baseChance)){
+    if(ratTip&&ratTip.acc&&ratTip.tu<=0&&C(0.55)){
+      const ms=EVTS.filter(e=>(!e.rid||e.rid===regionId)&&e.d===ratTip.did&&e.t===ratTip.dir);
+      return ms.length?ms[R(0,ms.length-1)]:null;
+    }
+    return null;
+  }
+  const eligible=EVTS.filter(e=>!e.rid||e.rid===regionId);
+  if(!eligible.length)return null;
+  if(ratTip&&ratTip.acc&&ratTip.tu<=0&&C(0.55)){
+    const ms=eligible.filter(e=>e.d===ratTip.did&&e.t===ratTip.dir);
+    if(ms.length)return ms[R(0,ms.length-1)];
+  }
+  return eligible[R(0,eligible.length-1)];
+}
+
+function genRatTip(rat, regionId) {
+  const acc = C(0.35 + rat.intel * 0.15);
+  if(acc){
+    const eligible=EVTS.filter(e=>!e.rid||e.rid===regionId);
+    if(!eligible.length)return null;
+    const ev=eligible[R(0,eligible.length-1)];
+    return {did:ev.d,dir:ev.t,conf:rat.intel,tu:R(1,2),acc:true};
+  }
+  const drug=DRUGS[R(0,DRUGS.length-1)];
+  return {did:drug.id,dir:C(0.5)?"spike":"crash",conf:rat.intel,tu:R(1,2),acc:false};
+}
+
+function genConsignmentOffer(p, loc) {
+  if(p.consignment) return null;
+  if(p.rep < 15) return null;
+  const gang = GANGS.find(g => g.turf.includes(loc));
+  if(!gang) return null;
+  if((p.gang[gang.id] ?? 0) < -5) return null;
+  if(!C(0.15)) return null;
+  const weights = DRUGS.map(d => ({drug:d, w:d.t*d.t}));
+  const tw = weights.reduce((s,w) => s+w.w, 0);
+  let roll = Math.random() * tw;
+  let picked = weights[0].drug;
+  for(const w of weights) { roll -= w.w; if(roll <= 0) { picked = w.drug; break; } }
+  let qty;
+  if(picked.t === 3) qty = R(3,8);
+  else if(picked.t === 2) qty = R(5,15);
+  else qty = R(10,30);
+  const wholesale = Math.round((picked.min + picked.max) / 2);
+  const owed = Math.round(wholesale * CONSIGNMENT_MARKUP * qty);
+  return {did:picked.id, qty, owed, gid:gang.id};
+}
+
+function customsCheck(p, destReg) {
+  const total=Object.values(p.inv).reduce((a,b)=>a+b,0);
+  if(total<=0)return null;
+  let det=destReg.cs+total*0.002+p.heat*0.002-(p.spc>SPACE0?0.05:0);
+  det=Math.max(0.05,Math.min(0.75,det));
+  if(!C(det))return null;
+  const carried=Object.entries(p.inv).filter(([,q])=>q>0);
+  if(!carried.length)return null;
+  const contrab=carried.filter(([id])=>destReg.cb.includes(id));
+  const target=contrab.length?contrab[R(0,contrab.length-1)][0]:carried[R(0,carried.length-1)][0];
+  const qty=p.inv[target];
+  const confQty=Math.max(1,Math.ceil(qty*R(30,80)/100));
+  const drug=DRUGS.find(d=>d.id===target);
+  const sv=confQty*R(drug.min,drug.max);
+  const fine=Math.min(Math.round(sv*R(10,30)/100),p.cash);
+  const hg=R(8,20);
+  return {drug:target,qty:confQty,fine,hg,msg:`Customs seized ${confQty} ${drug.e} ${drug.name} and fined you ${$(fine)}!`};
 }
 
 // ════════════════════════════════════════════════════════════
@@ -211,7 +307,8 @@ export default function App() {
   };
 
   const used = Object.values(cp.inv).reduce((a,b)=>a+b,0);
-  const free = cp.spc - used;
+  const effSpc = cp.spc - (10 - (cp.fingers||10)) * 5;
+  const free = effSpc - used;
   const loc = LOCS.find(l=>l.id===cp.loc);
   const rank = getRank(cp.rep);
   const nw = cp.cash+cp.bank-cp.debt+Object.entries(cp.inv).reduce((s,[id,q])=>{const d=DRUGS.find(x=>x.id===id);return s+q*(cp.prices[id]||d.min);},0);
@@ -227,6 +324,110 @@ export default function App() {
     const ms=[...(s.miles||[])]; let nm=null;
     for(const m of MILES){if(m.cond(s)&&!ms.includes(m.id)){ms.push(m.id);nm=m;}}
     return {miles:ms,newMile:nm};
+  }
+
+  function settleConsignment(p, isOverdue) {
+    const con = p.consignment;
+    const gang = GANGS.find(g => g.id === con.gid);
+    const gn = gang?.name || 'The gang';
+    const ge = gang?.e || '☠️';
+    let remaining = con.owed - con.paid;
+    const cashPay = Math.min(p.cash, remaining);
+    p.cash -= cashPay; remaining -= cashPay;
+    if(remaining > 0) {
+      const order = Object.keys(p.inv).sort((a,b) => a===con.did?-1:b===con.did?1:0);
+      for(const did of order) {
+        if(remaining <= 0) break;
+        const qty = p.inv[did] || 0;
+        if(qty <= 0) continue;
+        const pr = p.prices[did] || DRUGS.find(d=>d.id===did).min;
+        const take = Math.min(qty, Math.ceil(remaining/pr));
+        const val = take * pr;
+        p.inv = {...p.inv, [did]: qty - take};
+        if(p.inv[did] <= 0) delete p.inv[did];
+        remaining -= val;
+      }
+    }
+    const totalPaid = con.owed - Math.max(0, remaining);
+    const pct = totalPaid / con.owed;
+    const fullT = isOverdue ? 999 : 1.0;
+    const partT = isOverdue ? 1.0 : 0.7;
+    let outcome;
+    if(pct >= fullT) {
+      outcome = 'full';
+      p.gang = {...p.gang, [con.gid]: (p.gang[con.gid]??0)+8};
+      p.rep += 5; p.consignmentsCompleted++;
+      p.evs = [...p.evs, {d:p.day, m:`${ge} ${gn} pleased! 'You're alright.'`, t:"consignment"}];
+      SFX.lvl();
+    } else if(pct >= partT) {
+      outcome = 'partial';
+      p.fingers = Math.max(0, p.fingers-1);
+      p.gang = {...p.gang, [con.gid]: (p.gang[con.gid]??0)+(isOverdue?-6:-3)};
+      p.evs = [...p.evs, {d:p.day, m:`✂️ ${gn} took a finger. 'Next time, have it ALL.'`, t:"consignment"}];
+      SFX.bad(); shake();
+    } else {
+      outcome = 'poor';
+      p.fingers = Math.max(0, p.fingers-2);
+      p.gang = {...p.gang, [con.gid]: (p.gang[con.gid]??0)+(isOverdue?-16:-8)};
+      p.hp -= R(15,30);
+      p.evs = [...p.evs, {d:p.day, m:`✂️✂️ ${gn} took TWO fingers and beat you. 'Pathetic.'`, t:"consignment"}];
+      SFX.bad(); shake();
+    }
+    if(p.fingers <= 4) p.gun = false;
+    p.consignment = null;
+    const{miles,newMile}=chkMiles(p); p.miles=miles; p.newMile=newMile;
+    return outcome;
+  }
+
+  function bountyHunterAct(p, action) {
+    const con = p.consignment;
+    const gang = GANGS.find(g => g.id === con.gid);
+    const gn = gang?.name || 'The gang';
+    if(action === 'pay') {
+      const remaining = con.owed - con.paid;
+      let toPay = Math.round(remaining * 1.5);
+      const cashPay = Math.min(p.cash, toPay); p.cash -= cashPay; toPay -= cashPay;
+      if(toPay > 0) {
+        for(const did of Object.keys(p.inv)) {
+          if(toPay <= 0) break;
+          const qty = p.inv[did]||0; if(qty<=0)continue;
+          const pr = p.prices[did] || DRUGS.find(d=>d.id===did).min;
+          const take = Math.min(qty, Math.ceil(toPay/pr));
+          p.inv = {...p.inv, [did]: qty-take}; if(p.inv[did]<=0)delete p.inv[did];
+          toPay -= take * pr;
+        }
+      }
+      p.consignment = null; p.consignmentsCompleted++;
+      p.gang = {...p.gang, [con.gid]: (p.gang[con.gid]??0)-2};
+      p.evs = [...p.evs, {d:p.day, m:`🤝 Paid off ${gn}'s bounty hunter. Debt settled.`, t:"consignment"}];
+    } else if(action === 'fight') {
+      const killChance = p.gun ? 0.35 : 0.10;
+      if(C(killChance)) {
+        p.consignment = {...con, tl: -3};
+        p.heat = Math.min(HEAT_CAP, p.heat+12); p.rep += 10;
+        p.evs = [...p.evs, {d:p.day, m:`Fought off ${gn}'s bounty hunter! They'll be back...`, t:"consignment"}];
+      } else {
+        p.fingers = Math.max(0, p.fingers-1); p.hp -= R(15,30);
+        const dk = Object.keys(p.inv);
+        if(dk.length){const k=dk[R(0,dk.length-1)];const lq=Math.ceil((p.inv[k]||0)*R(30,60)/100);p.inv={...p.inv,[k]:(p.inv[k]||0)-lq};if(p.inv[k]<=0)delete p.inv[k];}
+        if(p.fingers<=4) p.gun=false;
+        p.evs = [...p.evs, {d:p.day, m:`✂️ ${gn}'s bounty hunter took a finger and beat you down.`, t:"consignment"}];
+        shake();
+      }
+    } else {
+      if(C(0.35)) {
+        p.evs = [...p.evs, {d:p.day, m:`Escaped ${gn}'s bounty hunter! For now...`, t:"consignment"}];
+        p.close++;
+      } else {
+        p.fingers = Math.max(0, p.fingers-1); p.hp -= R(5,15);
+        if(p.fingers<=4) p.gun=false;
+        p.evs = [...p.evs, {d:p.day, m:`✂️ Caught by ${gn}'s bounty hunter! Lost a finger.`, t:"consignment"}];
+        shake();
+      }
+    }
+    p.cops = null;
+    if(p.fingers <= 0) { p.hp=0; p.evs=[...p.evs,{d:p.day,m:"You have nothing left.",t:"danger"}]; }
+    return p;
   }
 
   // ── TRAVEL ───────────────────────────────────────────────
@@ -246,7 +447,8 @@ export default function App() {
     }
     sGs(prev => {
       const p = prev.mode==="2p" ? {...prev[prev.turn===1?"p1":"p2"]} : {...prev};
-      const td = isInterRegion ? (destReg.id==="nyc"?srcReg.td:destReg.td) : 1;
+      let td = isInterRegion ? (destReg.id==="nyc"?srcReg.td:destReg.td) : 1;
+      td += p.fingers <= 6 ? 1 : 0;
       p.day+=td;
       if(isInterRegion){
         if(destReg.id==="nyc") p.cash-=Math.round(srcReg.fly/2);
@@ -262,14 +464,36 @@ export default function App() {
       }
       p.debt=Math.round(p.debt*Math.pow(1+DINT,td));
       p.bank=Math.round(p.bank*Math.pow(1+BINT,td));
-      p.heat=Math.max(0,p.heat-R(3,10));
+      // Heat decay with regional law bonus
+      const law=getRegion(p.loc).law||{hdb:0};
+      let heatDecay=R(5,12)+law.hdb;
+      if(p.heat>60)heatDecay+=Math.floor((p.heat-60)*0.15);
+      p.heat=Math.max(0,p.heat-heatDecay);
       // Tribute
       const trib=Object.values(p.terr).reduce((s,d)=>s+(d.tr||0),0);
       p.trib=trib; p.cash+=trib*td;
+      // Customs check for inter-region travel
+      if(isInterRegion){
+        const cr=customsCheck(p,destReg);
+        if(cr){
+          const ni={...p.inv};ni[cr.drug]=(ni[cr.drug]||0)-cr.qty;if(ni[cr.drug]<=0)delete ni[cr.drug];
+          p.inv=ni;p.cash-=cr.fine;p.heat=Math.min(HEAT_CAP,p.heat+cr.hg);p.customsCaught++;
+          p.evs=[...p.evs,{d:p.day,m:`🛃 ${cr.msg}`,t:"customs"}];shake();
+        } else if(Object.values(p.inv).reduce((a,b)=>a+b,0)>0){
+          p.customsEvasions++;
+        }
+      }
+      // Rat tip tick-down
+      if(p.rat.pendingTip){
+        p.rat={...p.rat,pendingTip:{...p.rat.pendingTip,tu:p.rat.pendingTip.tu-1}};
+      }
       // Market
-      const ev=C(0.38)?EVTS[R(0,EVTS.length-1)]:null;
+      const curReg2=getRegion(p.loc);
+      const ev=selectEvent(curReg2.id,p.rat.pendingTip,0.38);
       p.ev=ev; p.prev={...p.prices}; p.prices=genP(p.loc,ev);
-      if(ev) p.evs=[...p.evs,{d:p.day,m:ev.m,t:ev.t}];
+      if(ev){const re=curReg2.id!=="nyc"?`${curReg2.em} `:"";p.evs=[...p.evs,{d:p.day,m:`${re}${ev.m}`,t:ev.t}];}
+      // Clear expired rat tip
+      if(p.rat.pendingTip&&p.rat.pendingTip.tu<=0){p.rat={...p.rat,pendingTip:null};}
       // NEAR MISS — only for drugs you no longer hold (sold too early)
       const nms=[];
       // SOLD-TOO-EARLY near miss
@@ -287,23 +511,57 @@ export default function App() {
         const tax=Math.round(p.cash*R(5,18)/100);p.cash-=tax;
         p.evs=[...p.evs,{d:p.day,m:`${lg.e} ${lg.name} taxed you ${$(tax)}!`,t:"danger"}];shake();
       }
+      // Consignment countdown
+      if(p.consignment) {
+        p.consignment = {...p.consignment, tl: p.consignment.tl - 1};
+        if(p.consignment.tl === 2) { /* warning handled by notify later */ }
+        if(p.consignment.tl === 1) { /* warning handled by notify later */ }
+        // Settlement if on origin location
+        if(p.loc === p.consignment.origin) {
+          const isOv = p.consignment.tl < 0;
+          settleConsignment(p, isOv);
+          if(p.fingers <= 0 || p.hp <= 0) {
+            if(prev.mode==="2p") return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"end"};
+            return{...prev,...p,phase:"end"};
+          }
+        }
+        // Bounty hunter if overdue and not on origin
+        else if(p.consignment && p.consignment.tl < 0) {
+          const ot = Math.abs(p.consignment.tl);
+          const bChance = Math.min(0.65, 0.25 + ot * 0.08);
+          if(C(bChance)) {
+            const con = p.consignment;
+            const curLaw2 = getRegion(p.loc).law || {bh:"brutal",bm:1,fn:"POLICE",fe:"🚔"};
+            p.cops = {n:1, br:Math.round((con.owed-con.paid)*1.5), law:curLaw2, bh:true, con:con};
+            if(prev.mode==="2p") return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"cop"};
+            return{...prev,...p,phase:"cop"};
+          }
+        }
+      }
       // Rat
       if(p.rat.hired&&p.rat.alive){
         p.rat={...p.rat,loy:p.rat.loy+R(-3,4)};
         if(p.rat.loy<20&&C(0.03+(50-p.rat.loy)/400)){
-          p.rat={...p.rat,alive:false};p.heat+=40;
-          p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name} RATTED YOU OUT! Heat surging!`,t:"danger"}];
-          shake();SFX.bad();
-        } else if(C(0.22+p.rat.intel*0.07)){
-          const td2=DRUGS[R(0,DRUGS.length-1)];const tt=C(0.5)?"spike":"crash";
-          p.rat={...p.rat,tips:p.rat.tips+1};
-          p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name}: "${td2.name} gonna ${tt==="spike"?"explode":"crash"} soon..."`,t:"tip"}];
+          p.rat={...p.rat,alive:false};p.heat=Math.min(HEAT_CAP,p.heat+40);
+          p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name} RATTED YOU OUT! Heat surging!`,t:"danger"}];shake();SFX.bad();
+        } else if(C(0.22+p.rat.intel*0.07)&&!p.rat.pendingTip){
+          const tip=genRatTip(p.rat,curReg2.id);
+          if(tip){
+            p.rat={...p.rat,tips:p.rat.tips+1,pendingTip:tip};
+            const td2=DRUGS.find(x=>x.id===tip.did);
+            p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name}: "${td2.name} gonna ${tip.dir==="spike"?"explode":"crash"} soon..." ${"⭐".repeat(tip.conf)}`,t:"tip"}];
+          }
         }
       }
-      // Cops
-      const cc=0.12+p.heat/350+(isInterRegion?0.1:0);
-      if(C(cc)&&used>0){
-        p.cops={n:R(1,2+Math.floor(p.heat/30)),br:R(400,1500)};
+      // Cops — regionalized
+      const curLaw=curReg2.law||{em2:0,ab:0,bm:1,bh:"brutal",fn:"POLICE",fe:"🚔"};
+      const copBase=0.08+(p.heat/200)*0.35+curLaw.em2;
+      const copChance=Math.min(0.65,copBase);
+      if(C(copChance)&&used>0){
+        const maxOff=Math.min(6,2+Math.floor(p.heat/35)+curLaw.ab);
+        const cnt=R(1,Math.max(1,maxOff));
+        const baseBr=R(300,1000);
+        p.cops={n:cnt,br:Math.round(baseBr*curLaw.bm),law:curLaw};
         if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"cop"};
         return{...prev,...p,phase:"cop"};
       }
@@ -311,7 +569,13 @@ export default function App() {
       if(C(0.07)){const s=Math.round(p.cash*R(8,28)/100);p.cash-=s;p.evs=[...p.evs,{d:p.day,m:`Mugged! Lost ${$(s)}!`,t:"danger"}];shake();}
       // Offers
       p.offer=null;
-      if(!p.gun&&C(0.14)) p.offer={type:"gun",price:R(300,600)};
+      // Consignment offer (highest priority)
+      const conOff = genConsignmentOffer(p, p.loc);
+      if(conOff) {
+        const cd = DRUGS.find(d=>d.id===conOff.did);
+        const cg = GANGS.find(g=>g.id===conOff.gid);
+        p.offer = {type:"consignment", did:conOff.did, qty:conOff.qty, owed:conOff.owed, origin:p.loc, gid:conOff.gid};
+      } else if(!p.gun&&C(0.14)) p.offer={type:"gun",price:R(300,600)};
       else if(C(0.12)){const sp=R(20,35);p.offer={type:"coat",price:R(150,400),sp};}
       else if(!p.rat.hired&&C(0.08)&&p.rep>=10) p.offer={type:"rat",rat:mkRat()};
       else if(p.rep>=25&&C(0.1)&&!p.terr[p.loc]){
@@ -325,7 +589,10 @@ export default function App() {
         if(prev.mode==="2p"){const k=prev.turn===1?"p1":"p2";const u={...prev,[k]:p};const ok=prev.turn===1?"p2":"p1";if(u[ok].day>DAYS)return{...u,phase:"end"};return{...u,turn:prev.turn===1?2:1,phase:"playing"};}
         return{...prev,...p,phase:p.cash+p.bank>=p.debt?"win":"end"};
       }
-      if(p.hp<=0){if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"end"};return{...prev,...p,phase:"end"};}
+      if(p.hp<=0 || p.fingers<=0){
+        if(p.fingers<=0) p.evs=[...p.evs,{d:p.day,m:"You have nothing left.",t:"danger"}];
+        if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"end"};return{...prev,...p,phase:"end"};
+      }
       if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"playing"};
       return{...prev,...p,phase:"playing"};
     });
@@ -339,7 +606,8 @@ export default function App() {
     sGs(prev=>{
       const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
       const u=Object.values(p.inv).reduce((a,b)=>a+b,0);
-      const sp=p.spc-u;
+      const effSpc = p.spc - (10 - p.fingers) * 5;
+      const sp = effSpc - u;
       if(tr.type==="buy"){
         const mx=Math.min(Math.floor(p.cash/price),sp);
         const q=Math.min(tq==="max"?99999:parseInt(tq)||0,mx);
@@ -349,12 +617,13 @@ export default function App() {
         const pq=prev.mode==="2p"?(prev[prev.turn===1?"p1":"p2"].inv[drug.id]||0):(prev.inv[drug.id]||0);
         const pa=prev.mode==="2p"?(prev[prev.turn===1?"p1":"p2"].avg[drug.id]||0):(prev.avg[drug.id]||0);
         p.avg={...p.avg,[drug.id]:(pa*pq+price*q)/(pq+q)};
-        p.heat+=Math.ceil(q*price/12000);p.trades++;SFX.buy();
+        p.heat=Math.min(HEAT_CAP,p.heat+Math.min(8,Math.ceil(q*price/25000)));p.trades++;SFX.buy();
       } else {
         const own=p.inv[drug.id]||0;
         const q=Math.min(tq==="max"?99999:parseInt(tq)||0,own);
         if(q<=0)return prev;
-        const rev=q*price;const ab=p.avg[drug.id]||price;
+        const fingerPen = (10 - p.fingers) * 0.03;
+        const rev = Math.round(q * price * (1 - fingerPen));const ab=p.avg[drug.id]||price;
         const pnl=rev-q*ab;
         p.cash+=rev;p.inv={...p.inv,[drug.id]:own-q};
         if(p.inv[drug.id]<=0){delete p.inv[drug.id];const na={...p.avg};delete na[drug.id];p.avg=na;}
@@ -368,7 +637,7 @@ export default function App() {
           if(g)p.gang={...p.gang,[g.id]:p.gang[g.id]+1};
           if(pnl>5000)SFX.big();else SFX.sell();
         }else{p.strk=0;p.combo=1;SFX.miss();}
-        p.trades++;p.heat+=Math.ceil(rev/15000);
+        p.trades++;p.heat=Math.min(HEAT_CAP,p.heat+Math.min(6,Math.ceil(rev/30000)));
       }
       const{miles,newMile}=chkMiles(p);p.miles=miles;p.newMile=newMile;
       if(newMile)SFX.lvl();
@@ -383,23 +652,49 @@ export default function App() {
     SFX.bad();
     sGs(prev=>{
       const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
+      // Bounty hunter
+      if(p.cops && p.cops.bh) {
+        const bhA = a==="bribe" ? "pay" : a;
+        bountyHunterAct(p, bhA);
+        p.cops = null;
+        if(p.hp<=0){if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"end"};return{...prev,...p,phase:"end"};}
+        if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"playing"};
+        return{...prev,...p,phase:"playing"};
+      }
       const c=p.cops;
+      const claw=c.law||{bh:"brutal",bm:1,fn:"POLICE",fe:"🚔"};
       if(a==="run"){
-        if(C(p.gun?0.55:0.38)){
-          p.evs=[...p.evs,{d:p.day,m:"Escaped! Heart pounding!",t:"info"}];p.close++;p.heat+=12;
+        let runChance=p.gun?0.55:0.38;
+        if(claw.bh==="corrupt")runChance+=0.05;
+        if(claw.bh==="methodical")runChance-=0.10;
+        if(C(runChance)){
+          p.evs=[...p.evs,{d:p.day,m:`Escaped the ${claw.fn}! Heart pounding!`,t:"info"}];p.close++;p.heat=Math.min(HEAT_CAP,p.heat+3);
         }else{
           const l=Math.round(p.cash*0.2);p.cash-=l;
-          const dk=Object.keys(p.inv);if(dk.length){const k=dk[R(0,dk.length-1)];const lq=Math.ceil(p.inv[k]*R(30,60)/100);p.inv={...p.inv,[k]:p.inv[k]-lq};if(p.inv[k]<=0)delete p.inv[k];}
-          p.hp-=R(5,18);p.heat+=18;p.close++;shake();
-          p.evs=[...p.evs,{d:p.day,m:`Caught! Lost ${$(l)} and product.`,t:"danger"}];
+          const dk=Object.keys(p.inv);if(dk.length){const k=dk[R(0,dk.length-1)];const confPct=claw.bh==="methodical"?R(30,70):R(30,60);const lq=Math.ceil(p.inv[k]*confPct/100);p.inv={...p.inv,[k]:p.inv[k]-lq};if(p.inv[k]<=0)delete p.inv[k];}
+          p.hp-=R(5,18);p.heat=Math.min(HEAT_CAP,p.heat+5);p.close++;shake();
+          p.evs=[...p.evs,{d:p.day,m:`${claw.fn} caught you! Lost ${$(l)} and product.`,t:"danger"}];
         }
       }else if(a==="fight"){
-        let kl=0,dm=0;for(let i=0;i<c.n;i++){if(C(p.gun?0.45:0.15))kl++;else dm+=R(p.gun?5:12,p.gun?15:30);}
-        p.hp-=dm;p.heat+=25+kl*12;p.rep+=kl*8;p.close++;shake();
-        p.evs=[...p.evs,{d:p.day,m:`Shootout! ${kl}/${c.n} down.${dm>20?" Hurt bad.":""}`,t:"danger"}];
+        let kl=0,dm=0;
+        const killChance=p.gun?0.45:0.15;
+        const dmMin=p.gun?5:12;const dmMax=p.gun?15:30;
+        if(claw.bh==="corrupt"){for(let i=0;i<c.n;i++){if(C(killChance))kl++;else dm+=Math.max(1,R(dmMin,dmMax)-3);}}
+        else{for(let i=0;i<c.n;i++){if(C(killChance))kl++;else dm+=R(dmMin,dmMax);}}
+        p.hp-=dm;p.heat=Math.min(HEAT_CAP,p.heat+Math.min(15,5+kl*3));
+        let repGain=kl*8;
+        if(claw.bh==="brutal")repGain=kl*10;
+        p.rep+=repGain;p.close++;shake();
+        p.evs=[...p.evs,{d:p.day,m:`Shootout with ${claw.fn}! ${kl}/${c.n} down.${dm>20?" Hurt bad.":""}`,t:"danger"}];
       }else{
-        const amt=c.br*c.n;if(p.cash>=amt){p.cash-=amt;p.heat-=8;p.evs=[...p.evs,{d:p.day,m:`Bribed cops for ${$(amt)}.`,t:"info"}];}
-        else{p.evs=[...p.evs,{d:p.day,m:"Can't afford bribe!",t:"danger"}];return prev;}
+        const amt=c.br*c.n;
+        if(p.cash>=amt){
+          p.cash-=amt;
+          const heatReduce=claw.bh==="methodical"?15:12;
+          p.heat=Math.max(0,p.heat-heatReduce);
+          p.evs=[...p.evs,{d:p.day,m:`Bribed ${claw.fn} for ${$(amt)}. Heat -${heatReduce}.`,t:"info"}];
+        }
+        else{p.evs=[...p.evs,{d:p.day,m:`Can't afford ${claw.fn} bribe!`,t:"danger"}];return prev;}
       }
       p.cops=null;
       if(p.hp<=0){if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"end"};return{...prev,...p,phase:"end"};}
@@ -416,8 +711,17 @@ export default function App() {
       const o=p.offer;
       if(o.type==="gun"&&p.cash>=o.price){p.cash-=o.price;p.gun=true;SFX.buy();}
       else if(o.type==="coat"&&p.cash>=o.price){p.cash-=o.price;p.spc+=o.sp;SFX.buy();}
-      else if(o.type==="rat"){p.cash-=o.rat.cost;p.rat={...o.rat,hired:true};SFX.buy();p.evs=[...p.evs,{d:p.day,m:`🐀 Hired ${o.rat.name}.`,t:"info"}];}
+      else if(o.type==="rat"){p.cash-=o.rat.cost;p.rat={...o.rat,hired:true,pendingTip:null};SFX.buy();p.evs=[...p.evs,{d:p.day,m:`🐀 Hired ${o.rat.name}.`,t:"info"}];}
       else if(o.type==="terr"&&p.cash>=o.cost){p.cash-=o.cost;p.terr={...p.terr,[o.lid]:{tr:o.tr,d:p.day}};p.rep+=15;SFX.lvl();p.evs=[...p.evs,{d:p.day,m:`🏴 Claimed ${LOCS.find(l=>l.id===o.lid)?.name}! +${$(o.tr)}/day`,t:"info"}];}
+      else if(o.type==="consignment"){
+        const cd=DRUGS.find(d=>d.id===o.did);
+        const cg=GANGS.find(g=>g.id===o.gid);
+        p.inv={...p.inv,[o.did]:(p.inv[o.did]||0)+o.qty};
+        p.consignment={gid:o.gid,did:o.did,qty:o.qty,owed:o.owed,paid:0,tl:CONSIGNMENT_TURNS,origin:o.origin,accepted:true};
+        p.gang={...p.gang,[o.gid]:(p.gang[o.gid]??0)+3};
+        SFX.buy();
+        p.evs=[...p.evs,{d:p.day,m:`☠️ Took ${o.qty} ${cd.e} ${cd.name} from ${cg.name}. Owe ${$(o.owed)} in ${CONSIGNMENT_TURNS} turns.`,t:"consignment"}];
+      }
       p.offer=null;const{miles}=chkMiles(p);p.miles=miles;
       if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p};
       return{...prev,...p};
@@ -427,7 +731,23 @@ export default function App() {
   function bk(t,a){scp(p=>{const v=a==="all"?(t==="dep"?p.cash:p.bank):Math.max(0,parseInt(a)||0);if(t==="dep"){const x=Math.min(v,p.cash);return{cash:p.cash-x,bank:p.bank+x};}else{const x=Math.min(v,p.bank);return{cash:p.cash+x,bank:p.bank-x};}});}
   function sk(a){scp(p=>{const v=a==="all"?Math.min(p.cash,p.debt):Math.min(parseInt(a)||0,p.cash,p.debt);const r={cash:p.cash-v,debt:p.debt-v};const{miles}=chkMiles({...p,...r});return{...r,miles};});}
   function skBorrow(a){scp(p=>({cash:p.cash+Math.max(0,a),debt:p.debt+Math.max(0,a)}));}
-  function payRat(){scp(p=>{if(p.cash<150)return{};return{cash:p.cash-150,rat:{...p.rat,loy:Math.min(100,p.rat.loy+R(5,12))}};}); notify("Loyalty boosted.","info");}
+  function payRat(){
+    scp(p=>{
+      if(p.cash<150||!p.rat.hired||!p.rat.alive)return{};
+      const nr={...p.rat,loy:Math.min(100,p.rat.loy+R(5,12))};
+      // 30% + intel*10% chance to generate immediate tip
+      if(!nr.pendingTip&&C(0.30+nr.intel*0.10)){
+        const tip=genRatTip(nr,getRegion(p.loc).id);
+        if(tip){
+          nr.tips++;nr.pendingTip=tip;
+          const td=DRUGS.find(x=>x.id===tip.did);
+          return{cash:p.cash-150,rat:nr,evs:[...p.evs,{d:p.day,m:`🐀 ${nr.name}: "${td.name} gonna ${tip.dir==="spike"?"explode":"crash"} soon..." ${"⭐".repeat(tip.conf)}`,t:"tip"}]};
+        }
+      }
+      return{cash:p.cash-150,rat:nr};
+    });
+    notify("Loyalty boosted.","info");
+  }
 
   // ════════════════════════════════════════════════════════
   // RENDER
@@ -500,18 +820,51 @@ export default function App() {
 
   // COPS
   if(gs.phase==="cop"){
-    const cops2=cp.cops;const bribeCost=cops2.br*cops2.n;
+    const cops2=cp.cops;
+    // Bounty hunter mode
+    if(cops2.bh) {
+      const con = cp.consignment;
+      const bGang = GANGS.find(g=>g.id===con.gid);
+      const bGn = bGang?.name || 'The gang';
+      const remaining = con.owed - con.paid;
+      const payAmt = Math.round(remaining * 1.5);
+      return(
+        <div style={Z.root}><style>{CSS}</style>
+          <div className={ui.shk?"shk":""} style={{...Z.ctr,background:"radial-gradient(circle at 50% 20%,rgba(234,179,8,0.08),transparent)"}}>
+            <div style={{fontSize:56}}>🤝</div>
+            <h2 style={{fontSize:24,fontWeight:900,color:"#f59e0b",margin:"8px 0"}}>BOUNTY HUNTER!</h2>
+            <p style={{color:"#fde68a",fontSize:13,margin:"0 0 2px"}}>{bGn} sent someone to collect.</p>
+            <p style={{color:"#64748b",fontSize:10,fontStyle:"italic",margin:"0 0 2px"}}>You owe {$(remaining)}. They want {$(payAmt)}.</p>
+            <p style={{color:"#475569",fontSize:11,marginBottom:16}}>Cash: {$(cp.cash)} • HP: {cp.hp}</p>
+            <div style={{display:"flex",flexDirection:"column",gap:8,maxWidth:240,margin:"0 auto"}}>
+              <button onClick={()=>copAct("bribe")} style={{...Z.actBtn,background:"linear-gradient(135deg,#f59e0b,#b45309)"}}>💰 PAY UP <small style={{opacity:0.7}}>{$(payAmt)}</small></button>
+              <button onClick={()=>copAct("fight")} style={{...Z.actBtn,background:"linear-gradient(135deg,#ef4444,#b91c1c)"}}>{cp.gun?"🔫":"👊"} FIGHT <small style={{opacity:0.7}}>{cp.gun?"35%":"10%"} win</small></button>
+              <button onClick={()=>copAct("run")} style={{...Z.actBtn,background:"linear-gradient(135deg,#3b82f6,#1d4ed8)"}}>🏃 RUN <small style={{opacity:0.7}}>35%</small></button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // Normal cop encounter continues...
+    const bribeCost=cops2.br*cops2.n;
+    const claw=cops2.law||{bh:"brutal",bm:1,fn:"POLICE",fe:"🚔"};
+    let runPct=cp.gun?55:38;
+    if(claw.bh==="corrupt")runPct+=5;
+    if(claw.bh==="methodical")runPct-=10;
+    const heatReduce=claw.bh==="methodical"?15:12;
+    const flavorText=claw.bh==="corrupt"?"Might look the other way...":claw.bh==="methodical"?"Thorough and relentless.":"Shoot first, ask later.";
     return(
       <div style={Z.root}><style>{CSS}</style>
         <div className={ui.shk?"shk":""} style={{...Z.ctr,background:"radial-gradient(circle at 50% 20%,rgba(239,68,68,0.08),transparent)"}}>
           <div style={{fontSize:56,animation:"pulse 0.7s infinite"}}>🚨</div>
-          <h2 style={{fontSize:24,fontWeight:900,color:"#ef4444",margin:"8px 0"}}>POLICE!</h2>
+          <h2 style={{fontSize:24,fontWeight:900,color:"#ef4444",margin:"8px 0"}}>{claw.fe} {claw.fn.toUpperCase()}!</h2>
           <p style={{color:"#fca5a5",fontSize:13,margin:"0 0 2px"}}>{cops2.n} officer{cops2.n>1?"s":""} closing in!</p>
+          <p style={{color:"#64748b",fontSize:10,fontStyle:"italic",margin:"0 0 2px"}}>{flavorText}</p>
           <p style={{color:"#475569",fontSize:11,marginBottom:16}}>Carrying {used} units • Heat {cp.heat}%</p>
           <div style={{display:"flex",flexDirection:"column",gap:8,maxWidth:240,margin:"0 auto"}}>
-            <button onClick={()=>copAct("run")} style={{...Z.actBtn,background:"linear-gradient(135deg,#3b82f6,#1d4ed8)"}}>🏃 RUN <small style={{opacity:0.7}}>{cp.gun?"55%":"38%"}</small></button>
-            <button onClick={()=>copAct("fight")} style={{...Z.actBtn,background:"linear-gradient(135deg,#ef4444,#b91c1c)"}}>{cp.gun?"🔫":"👊"} FIGHT <small style={{opacity:0.7}}>{cp.gun?"armed":"bare fists"}</small></button>
-            <button onClick={()=>copAct("bribe")} disabled={cp.cash < bribeCost} style={{...Z.actBtn,background:cp.cash>=bribeCost?"linear-gradient(135deg,#f59e0b,#b45309)":"#1e293b",opacity:cp.cash>=bribeCost?1:0.4}}>💰 BRIBE <small style={{opacity:0.7}}>{$(bribeCost)}</small></button>
+            <button onClick={()=>copAct("run")} style={{...Z.actBtn,background:"linear-gradient(135deg,#3b82f6,#1d4ed8)"}}>🏃 RUN <small style={{opacity:0.7}}>{runPct}%</small></button>
+            <button onClick={()=>copAct("fight")} style={{...Z.actBtn,background:"linear-gradient(135deg,#ef4444,#b91c1c)"}}>{cp.gun?"🔫":"👊"} FIGHT <small style={{opacity:0.7}}>{cp.gun?"armed":"bare fists"}{claw.bh==="brutal"?" (tough)":claw.bh==="corrupt"?" (weak)":""}</small></button>
+            <button onClick={()=>copAct("bribe")} disabled={cp.cash < bribeCost} style={{...Z.actBtn,background:cp.cash>=bribeCost?"linear-gradient(135deg,#f59e0b,#b45309)":"#1e293b",opacity:cp.cash>=bribeCost?1:0.4}}>💰 BRIBE <small style={{opacity:0.7}}>{$(bribeCost)} • heat -{heatReduce}</small></button>
           </div>
         </div>
       </div>
@@ -578,7 +931,7 @@ export default function App() {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:3,margin:"5px 0"}}>
             <MS l="DEBT" v={$(cp.debt)} c={cp.debt>0?"#ef4444":"#22c55e"}/>
             <MS l="BANK" v={$(cp.bank)} c="#3b82f6"/>
-            <MS l="SPACE" v={`${free}/${cp.spc}`} c={free<15?"#f59e0b":"#475569"}/>
+            <MS l="SPACE" v={`${free}/${cp.spc-(10-cp.fingers)*5}`} c={free<15?"#f59e0b":"#475569"}/>
             <MS l="REP" v={cp.rep} c="#a855f7"/>
           </div>
           <Bar l="🔥 HEAT" p={cp.heat} c={cp.heat<30?"#22c55e":cp.heat<60?"#f59e0b":"#ef4444"}/>
@@ -597,9 +950,11 @@ export default function App() {
           <div style={{marginLeft:"auto",display:"flex",gap:3}}>
             {cp.gun&&<span>🔫</span>}{cp.rat.hired&&cp.rat.alive&&<span title={`${cp.rat.name} ${cp.rat.loy}%`}>🐀</span>}
             {Object.keys(cp.terr).length>0&&<span style={{fontSize:10}}>{Object.keys(cp.terr).length}🏴</span>}
+            {cp.fingers<10&&<span style={{fontSize:9,fontWeight:700,color:cp.fingers<=4?"#ef4444":cp.fingers<=6?"#f59e0b":"#fdba74"}}>✋ {cp.fingers}/10</span>}
             <button onClick={()=>sUi(u=>({...u,sub:u.sub==="help"?null:"help"}))} style={{width:16,height:16,borderRadius:8,background:"rgba(255,255,255,0.06)",border:"none",fontSize:9,fontWeight:800,color:"#334155",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",padding:0}}>?</button>
           </div>
         </div>
+        {cp.consignment&&(()=>{const con=cp.consignment;const cg=GANGS.find(g=>g.id===con.gid);const cl=LOCS.find(l=>l.id===con.origin);return<div style={{margin:"0 8px 3px",padding:"5px 8px",borderRadius:5,background:con.tl<=1?"rgba(239,68,68,0.08)":"rgba(234,179,8,0.06)",border:`1px solid ${con.tl<=1?"rgba(239,68,68,0.2)":"rgba(234,179,8,0.15)"}`,fontSize:10,fontWeight:600,color:con.tl<=1?"#ef4444":"#f59e0b"}}>🤝 Owe {cg?.name} {$(con.owed-con.paid)} • ⏰ {con.tl>0?`${con.tl} turn${con.tl!==1?"s":""}`:"OVERDUE!"} • Return to {cl?.name||"???"}</div>;})()}
         {/* Help panel */}
         {ui.sub==="help"&&<div style={{margin:"0 8px 4px",padding:8,borderRadius:5,background:"rgba(30,41,59,0.95)",border:"1px solid rgba(255,255,255,0.08)",maxHeight:260,overflow:"auto"}}>
           <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:2,marginBottom:2}}>HOW TO PLAY</div>
@@ -607,21 +962,26 @@ export default function App() {
           <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>BANK & SHARK</div>
           <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Visit a capital city (marked 🏦🦈) to deposit cash at 5%/day interest, or borrow from the shark at 10%/day. Every region's capital has both.</div>
           <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>HEAT & COPS</div>
-          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Buying and selling raises heat. High heat = more cop encounters. Bribe, run, or fight your way out.</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Buying and selling raises heat (max 100). High heat = more cop encounters (max 65% chance). Each region has its own law force with different behaviors: corrupt (easier to bribe/run), brutal (tougher fights), or methodical (thorough searches, hard to escape).</div>
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>CUSTOMS</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Flying between regions risks customs inspection. They may seize contraband and fine you. Risk depends on cargo amount, heat, and destination strictness. Some drugs are flagged as contraband per region.</div>
           <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>REPUTATION</div>
           <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Earn rep by making profitable trades. Higher rep unlocks international regions and new ranks:</div>
           {RANKS.map(r=><div key={r.n} style={{fontSize:8,color:"#475569",paddingLeft:6,lineHeight:1.6}}>{r.e} {r.n} — {r.r} rep</div>)}
           <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>INTERNATIONAL TRAVEL</div>
           <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Fly to other regions for cheaper drugs. Each has 6 cities, a local gang, and unique price discounts. Return to NYC costs half price.</div>
           {REGIONS.filter(r=>r.id!=="nyc").map(r=><div key={r.id} style={{fontSize:8,color:"#475569",paddingLeft:6,lineHeight:1.6}}>{r.em} {r.name} — {r.rep} rep, ${r.fly.toLocaleString()} flight{"\n   "}{Object.entries(r.pm).map(([d,m])=>`${DRUGS.find(x=>x.id===d)?.name} -${Math.round((1-m)*100)}%`).join(", ")}</div>)}
+          <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>CONSIGNMENT</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Gangs may offer drugs on credit (2x markup). You have 5 turns to sell and repay. Return to the gang's turf to settle. Pay 100% on time = respect. Partial = lose a finger. Late or short = worse. Don't pay? Bounty hunters come for you.</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Each lost finger: -5 inventory space, -3% sell revenue. At 6 fingers: +1 travel day. At 4: lose your gun. At 0: game over.</div>
           <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>GANGS & TERRITORY</div>
           <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>Some cities are gang turf. Trade there to build relations. At 25+ rep you can claim territory for daily tribute income. Bad relations = taxes.</div>
           <div style={{fontSize:8,fontWeight:800,color:"#f59e0b",letterSpacing:1,marginTop:6,marginBottom:2}}>INFORMANTS</div>
-          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>At 10+ rep you may meet a rat who gives price tips. Pay them to keep loyalty up — low loyalty = they flip on you.</div>
+          <div style={{fontSize:9,color:"#94a3b8",lineHeight:1.5}}>At 10+ rep you may meet a rat who gives predictive price tips. Pay them to keep loyalty up and sometimes get immediate intel — low loyalty = they flip on you. Tips show predicted drug and direction with confidence stars.</div>
           <button onClick={()=>sUi(u=>({...u,sub:null}))} style={{marginTop:6,background:"rgba(255,255,255,0.05)",border:"none",borderRadius:3,padding:"4px 0",width:"100%",fontSize:9,fontWeight:700,color:"#334155",letterSpacing:1,cursor:"pointer",fontFamily:"inherit"}}>CLOSE</button>
         </div>}
         {/* EVENT */}
-        {cp.ev&&<div style={{margin:"0 8px 3px",padding:"5px 8px",borderRadius:5,background:cp.ev.t==="spike"?"rgba(239,68,68,0.08)":"rgba(34,197,94,0.08)",border:`1px solid ${cp.ev.t==="spike"?"#ef444425":"#22c55e25"}`,fontSize:10,color:cp.ev.t==="spike"?"#fca5a5":"#86efac",fontWeight:600}}>{cp.ev.t==="spike"?"📈":"📉"} {cp.ev.m}</div>}
+        {cp.ev&&<div style={{margin:"0 8px 3px",padding:"5px 8px",borderRadius:5,background:cp.ev.t==="spike"?"rgba(239,68,68,0.08)":"rgba(34,197,94,0.08)",border:`1px solid ${cp.ev.t==="spike"?"#ef444425":"#22c55e25"}`,fontSize:10,color:cp.ev.t==="spike"?"#fca5a5":"#86efac",fontWeight:600}}>{cp.ev.t==="spike"?"📈":"📉"} {cp.ev.rid?`${REGIONS.find(r=>r.id===cp.ev.rid)?.em||""} `:""}{cp.ev.m}</div>}
         {/* NEAR MISS — DOPAMINE */}
         {cp.nms.length>0&&<div style={{margin:"0 8px 3px",padding:"6px 8px",borderRadius:5,background:"rgba(249,115,22,0.06)",border:"1px solid rgba(249,115,22,0.15)",fontSize:10,color:"#fdba74",animation:"pulse 2s infinite"}}>
           😱 <b>{cp.nms[0].type==="sold_early"?"Sold too early!":"Near miss!"}</b> {cp.nms[0].drug.e} {cp.nms[0].drug.name} {cp.nms[0].type==="sold_early"?"jumped to":"spiked to"} {$(cp.nms[0].now)} — {cp.nms[0].type==="sold_early"?"you just sold":"you had"} {cp.nms[0].q}! Missed {$(cp.nms[0].miss)}!
@@ -633,9 +993,10 @@ export default function App() {
             {cp.offer.type==="coat"&&`🧥 Bigger coat (+${cp.offer.sp}) — ${$(cp.offer.price)}`}
             {cp.offer.type==="rat"&&`🐀 "${cp.offer.rat.name}" wants to be your informant — ${$(cp.offer.rat.cost)} (${cp.offer.rat.pers})`}
             {cp.offer.type==="terr"&&`🏴 Take over ${LOCS.find(l=>l.id===cp.offer.lid)?.name} — ${$(cp.offer.cost)} (+${$(cp.offer.tr)}/day)`}
+            {cp.offer.type==="consignment"&&`🤝 ${GANGS.find(g=>g.id===cp.offer.gid)?.name} offers ${cp.offer.qty} ${DRUGS.find(d=>d.id===cp.offer.did)?.e} ${DRUGS.find(d=>d.id===cp.offer.did)?.name} on consignment — owe ${$(cp.offer.owed)} in 5 turns`}
           </div>
           <div style={{display:"flex",gap:5}}>
-            <button onClick={()=>offer(true)} disabled={cp.cash<(cp.offer.price||cp.offer.cost||cp.offer.rat?.cost)} style={{...Z.sm,background:"#4f46e5"}}>Accept</button>
+            <button onClick={()=>offer(true)} disabled={cp.offer.type!=="consignment"&&cp.cash<(cp.offer.price||cp.offer.cost||cp.offer.rat?.cost||0)} style={{...Z.sm,background:"#4f46e5"}}>Accept</button>
             <button onClick={()=>offer(false)} style={{...Z.sm,background:"#1e293b"}}>Pass</button>
           </div>
         </div>}
@@ -685,7 +1046,7 @@ export default function App() {
             })}
           </div>
           {Object.keys(cp.inv).length>0&&<div style={{marginTop:6,display:"flex",flexDirection:"column",gap:2}}>
-            <div style={{fontSize:7,color:"#334155",letterSpacing:1,marginBottom:2}}>CARRYING {used}/{cp.spc}</div>
+            <div style={{fontSize:7,color:"#334155",letterSpacing:1,marginBottom:2}}>CARRYING {used}/{effSpc}</div>
             {Object.entries(cp.inv).filter(([,q])=>q>0).map(([id,q])=>{const d=DRUGS.find(x=>x.id===id);const pr=cp.prices[id];const val=pr?q*pr:0;const ab=cp.avg[id];const pnl=pr&&ab?((pr-ab)/ab*100):null;return<div key={id} style={{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.02)",borderRadius:3,padding:"3px 6px",gap:4}}>
               <span style={{fontSize:12}}>{d.e}</span>
               <span style={{fontSize:10,fontWeight:600,color:"#94a3b8",flex:1}}>{d.name}</span>
@@ -700,12 +1061,13 @@ export default function App() {
         {ui.tab==="map"&&(()=>{const curReg=getRegion(cp.loc);const regLocs=getRegionLocs(curReg.id);const others=REGIONS.filter(r=>r.id!==curReg.id);return<div style={{padding:"4px 8px"}}>
           <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>{curReg.em} {curReg.name.toUpperCase()}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:8}}>
-            {regLocs.map(l=>{const cur=l.id===cp.loc;const own=!!cp.terr[l.id];const g=GANGS.find(x=>x.turf.includes(l.id));return(
-              <button key={l.id} onClick={()=>travel(l.id)} disabled={cur} style={{background:cur?`${l.c}15`:own?"rgba(34,197,94,0.04)":`${l.c}06`,border:`1px solid ${cur?l.c+"35":own?"#22c55e22":l.c+"12"}`,borderRadius:5,padding:"6px 3px",textAlign:"center",color:cur?l.c:"#94a3b8",fontSize:10,fontWeight:cur?800:600,cursor:cur?"default":"pointer",opacity:cur?.5:1,fontFamily:"inherit"}}>
+            {regLocs.map(l=>{const cur=l.id===cp.loc;const own=!!cp.terr[l.id];const g=GANGS.find(x=>x.turf.includes(l.id));const isCO=cp.consignment&&cp.consignment.origin===l.id;return(
+              <button key={l.id} onClick={()=>travel(l.id)} disabled={cur} style={{background:cur?`${l.c}15`:own?"rgba(34,197,94,0.04)":isCO?"rgba(234,179,8,0.04)":`${l.c}06`,border:`1px solid ${cur?l.c+"35":own?"#22c55e22":isCO?(cp.consignment.tl<=0?"#ef444444":"#f59e0b44"):l.c+"12"}`,borderRadius:5,padding:"6px 3px",textAlign:"center",color:cur?l.c:"#94a3b8",fontSize:10,fontWeight:cur?800:600,cursor:cur?"default":"pointer",opacity:cur?.5:1,fontFamily:"inherit"}}>
                 <div style={{fontSize:14,marginBottom:1}}>{l.e}</div>{l.name}
                 {own&&<div style={{fontSize:7,color:"#22c55e"}}>🏴 Yours</div>}
                 {g&&!own&&<div style={{fontSize:7,color:g.c}}>{g.e}</div>}
                 {l.bank&&<div style={{fontSize:6,color:"#334155"}}>🏦🦈</div>}
+                {cp.consignment&&cp.consignment.origin===l.id&&<div style={{fontSize:6,fontWeight:700,color:cp.consignment.tl<=0?"#ef4444":"#f59e0b"}}>📍 Return here</div>}
               </button>
             );})}
           </div>
@@ -717,6 +1079,12 @@ export default function App() {
                 {!ok&&<div style={{fontSize:7,color:"#334155"}}>🔒 {repN} rep</div>}
                 {ok&&<div style={{fontSize:7,color:"#475569"}}>✈️ {$(cost)} • {isNyc?(curReg.td||2):r.td}d</div>}
                 {ok&&!isNyc&&Object.keys(r.pm).length>0&&<div style={{fontSize:6,color:"#334155"}}>{Object.entries(r.pm).map(([d,m])=>`${DRUGS.find(x=>x.id===d)?.e}${Math.round((1-m)*100)}%↓`).join(" ")}</div>}
+                {ok&&used>0&&(()=>{
+                  const cRisk=Math.round(Math.max(0.05,Math.min(0.75,r.cs+used*0.002+cp.heat*0.002-(cp.spc>SPACE0?0.05:0)))*100);
+                  return <div style={{fontSize:6,fontWeight:600,color:cRisk>=50?"#ef4444":cRisk>=30?"#f59e0b":"#475569",marginTop:1}}>
+                    🛃 {cRisk}% risk{r.cb.length>0&&` • ${r.cb.map(id=>DRUGS.find(d=>d.id===id)?.e||"").join("")} 2x`}
+                  </div>;
+                })()}
               </button>
             );})}
           </div>
@@ -736,9 +1104,35 @@ export default function App() {
               <Bar l="" p={cp.rat.loy} c={cp.rat.loy>60?"#7c3aed":cp.rat.loy>30?"#f59e0b":"#ef4444"}/>
               <div style={{fontSize:8,color:"#475569",margin:"2px 0"}}>Intel: {"⭐".repeat(cp.rat.intel)} • Tips: {cp.rat.tips}</div>
               {cp.rat.loy<40&&<div style={{fontSize:9,color:"#ef4444",fontWeight:600,animation:"pulse 2s infinite"}}>⚠️ Might flip!</div>}
-              <button onClick={payRat} disabled={cp.cash<150} style={{...Z.sm,background:"#6d28d9",marginTop:3}}>💰 Pay ($150)</button>
+              {cp.rat.pendingTip&&(()=>{const tip=cp.rat.pendingTip;const td=DRUGS.find(x=>x.id===tip.did);return<div style={{background:"rgba(124,58,237,0.08)",borderRadius:4,padding:5,margin:"3px 0",border:"1px solid rgba(124,58,237,0.18)"}}>
+                <div style={{fontSize:9,fontWeight:700,color:"#c4b5fd",marginBottom:2}}>🐀 {cp.rat.name} says:</div>
+                <div style={{fontSize:10,color:"#c4b5fd",fontStyle:"italic"}}>"{td.e} {td.name} gonna {tip.dir==="spike"?"explode":"crash"} soon..."</div>
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
+                  <span style={{fontSize:8,color:"#f59e0b",fontWeight:600}}>{"⭐".repeat(tip.conf)} {tip.conf>=3?"HIGH":tip.conf>=2?"MED":"LOW"}</span>
+                  <span style={{fontSize:8,color:"#475569"}}>~{tip.tu>0?`${tip.tu} turn${tip.tu>1?"s":""}`:""}</span>
+                </div>
+              </div>;})()}
+              <button onClick={payRat} disabled={cp.cash<150} style={{...Z.sm,background:"#6d28d9",marginTop:3}}>💰 Pay ($150){!cp.rat.pendingTip?" — may get intel":""}</button>
             </div>:cp.rat.hired?<div style={{fontSize:10,color:"#ef4444",padding:6}}>💀 {cp.rat.name} sold you out.</div>:<div style={{fontSize:10,color:"#334155",padding:6}}>No informant yet.</div>}
           </div>
+          {/* Consignment */}
+          {cp.consignment&&(()=>{const con=cp.consignment;const cg=GANGS.find(g=>g.id===con.gid);const cd=DRUGS.find(d=>d.id===con.did);const cl=LOCS.find(l=>l.id===con.origin);return<div style={{marginBottom:6}}>
+            <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>🤝 CONSIGNMENT</div>
+            <div style={{background:"rgba(234,179,8,0.04)",border:"1px solid rgba(234,179,8,0.12)",borderRadius:5,padding:6}}>
+              <div style={{fontSize:10,color:"#94a3b8",padding:"1px 0"}}>Owe: {cg?.e} {cg?.name}</div>
+              <div style={{fontSize:10,color:"#94a3b8",padding:"1px 0"}}>Drug: {cd?.e} {cd?.name} ({con.qty} units)</div>
+              <div style={{fontSize:10,color:"#94a3b8",padding:"1px 0"}}>Debt: {$(con.owed)} ({$(con.paid)} paid)</div>
+              <div style={{fontSize:10,color:con.tl<=1?"#ef4444":con.tl<=2?"#f59e0b":"#94a3b8",padding:"1px 0"}}>Deadline: {con.tl>0?`${con.tl} turn${con.tl!==1?"s":""}`:"OVERDUE!"}</div>
+              <div style={{fontSize:10,color:"#94a3b8",padding:"1px 0"}}>Return to: {cl?.e} {cl?.name}</div>
+            </div>
+          </div>;})()}
+          {/* Fingers */}
+          {cp.fingers<10&&<div style={{marginBottom:6}}>
+            <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>✋ FINGERS</div>
+            <div style={{fontSize:9,color:cp.fingers<=4?"#ef4444":cp.fingers<=6?"#f59e0b":"#fdba74",padding:"2px 6px"}}>
+              {cp.fingers}/10 remaining • -{(10-cp.fingers)*5} space • -{(10-cp.fingers)*3}% sell value{cp.fingers<=6?" • +1 travel day":""}{cp.fingers<=4?" • Can't hold a gun":""}
+            </div>
+          </div>}
           {/* Territories */}
           <div style={{marginBottom:6}}>
             <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>🏴 TERRITORIES</div>
@@ -768,7 +1162,7 @@ export default function App() {
           <div>
             <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>📜 LOG</div>
             <div style={{maxHeight:120,overflow:"auto"}}>
-              {[...cp.evs].reverse().slice(0,10).map((e,i)=><div key={i} style={{fontSize:9,padding:"1px 0",color:e.t==="danger"?"#fca5a5":e.t==="spike"?"#f9a8d4":e.t==="crash"?"#86efac":e.t==="tip"?"#c4b5fd":"#475569",opacity:1-i*.06}}>
+              {[...cp.evs].reverse().slice(0,10).map((e,i)=><div key={i} style={{fontSize:9,padding:"1px 0",color:e.t==="danger"?"#fca5a5":e.t==="spike"?"#f9a8d4":e.t==="crash"?"#86efac":e.t==="tip"?"#c4b5fd":e.t==="customs"?"#fdba74":e.t==="consignment"?"#fde68a":"#475569",opacity:1-i*.06}}>
                 <span style={{color:"#1e293b"}}>D{e.d}</span> {e.m}</div>)}
             </div>
           </div>

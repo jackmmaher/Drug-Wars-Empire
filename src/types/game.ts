@@ -1,5 +1,16 @@
 // ── Core Game Types ──────────────────────────────────────
 
+export interface Consignment {
+  gangId: string;
+  drugId: string;
+  quantity: number;
+  amountOwed: number;
+  amountPaid: number;
+  turnsLeft: number;
+  originLocation: string;
+  accepted: boolean;
+}
+
 export interface Drug {
   id: string;
   name: string;
@@ -7,6 +18,16 @@ export interface Drug {
   min: number;
   max: number;
   tier: number;
+}
+
+export interface RegionLaw {
+  forceName: string;
+  forceEmoji: string;
+  bribeMultiplier: number;
+  aggressionBase: number;
+  heatDecayBonus: number;
+  encounterModifier: number;
+  behavior: 'corrupt' | 'brutal' | 'methodical';
 }
 
 export interface Region {
@@ -19,6 +40,9 @@ export interface Region {
   travelDays: number;
   priceMultipliers: Record<string, number>;
   gangId: string;
+  law: RegionLaw;
+  customsStrictness: number;
+  contraband: string[];
 }
 
 export interface Location {
@@ -50,6 +74,7 @@ export interface MarketEvent {
   drugId: string;
   multiplier: number;
   type: 'spike' | 'crash';
+  regionId?: string | null;
 }
 
 export interface Milestone {
@@ -57,6 +82,14 @@ export interface Milestone {
   condition: (s: PlayerState) => boolean;
   label: string;
   emoji: string;
+}
+
+export interface RatTip {
+  drugId: string;
+  direction: 'spike' | 'crash';
+  confidence: number;
+  turnsUntil: number;
+  accurate: boolean;
 }
 
 export interface Rat {
@@ -68,21 +101,30 @@ export interface Rat {
   hired: boolean;
   cost: number;
   tips: number;
+  pendingTip: RatTip | null;
 }
 
 export interface CopEncounter {
   count: number;
   bribeCost: number;
+  regionLaw: RegionLaw;
+  bountyHunter?: boolean;
+  consignment?: Consignment;
 }
 
 export interface Offer {
-  type: 'gun' | 'coat' | 'rat' | 'territory';
+  type: 'gun' | 'coat' | 'rat' | 'territory' | 'consignment';
   price?: number;
   space?: number;
   rat?: Rat;
   locationId?: string;
   cost?: number;
   tribute?: number;
+  drugId?: string;
+  quantity?: number;
+  amountOwed?: number;
+  originLocation?: string;
+  gangId?: string;
 }
 
 export interface Territory {
@@ -102,7 +144,7 @@ export interface NearMiss {
 export interface EventLog {
   day: number;
   message: string;
-  type: 'info' | 'danger' | 'spike' | 'crash' | 'tip';
+  type: 'info' | 'danger' | 'spike' | 'crash' | 'tip' | 'customs' | 'consignment';
 }
 
 export interface RecentSold {
@@ -146,6 +188,11 @@ export interface PlayerState {
   milestones: string[];
   newMilestone: Milestone | null;
   recentSold: RecentSold[];
+  customsEvasions: number;
+  customsCaught: number;
+  consignment: Consignment | null;
+  fingers: number;
+  consignmentsCompleted: number;
 }
 
 export type GamePhase = 'title' | 'playing' | 'cop' | 'win' | 'end';

@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, DAYS, LOCATIONS, RANKS, REGIONS, DRUGS, getRank, getRegionForLocation } from '../constants/game';
-import { inventoryCount, netWorth } from '../lib/game-logic';
+import { $, DAYS, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, getRank, getRegionForLocation, getRegion } from '../constants/game';
+import { inventoryCount, netWorth, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
 import { MiniStat } from './MiniStat';
@@ -17,10 +17,13 @@ export function GameHeader() {
   const rank = getRank(cp.rep);
   const nw = netWorth(cp);
   const used = inventoryCount(cp.inventory);
-  const free = cp.space - used;
+  const espce = effectiveSpace(cp);
+  const free = espce - used;
   const loc = LOCATIONS.find(l => l.id === cp.location);
   const region = getRegionForLocation(cp.location);
   const isAbroad = region && region.id !== 'nyc';
+  const conGang = cp.consignment ? GANGS.find(g => g.id === cp.consignment!.gangId) : null;
+  const conLoc = cp.consignment ? LOCATIONS.find(l => l.id === cp.consignment!.originLocation) : null;
 
   return (
     <View style={styles.container}>
@@ -52,7 +55,7 @@ export function GameHeader() {
         <View style={styles.statsRow}>
           <MiniStat label="DEBT" value={$(cp.debt)} color={cp.debt > 0 ? colors.red : colors.green} />
           <MiniStat label="BANK" value={$(cp.bank)} color={colors.blue} />
-          <MiniStat label="SPACE" value={`${free}/${cp.space}`} color={free < 15 ? colors.yellow : colors.textMuted} />
+          <MiniStat label="SPACE" value={`${free}/${espce}`} color={free < 15 ? colors.yellow : colors.textMuted} />
           <MiniStat label="REP" value={cp.rep} color={colors.purple} />
         </View>
 
@@ -92,11 +95,25 @@ export function GameHeader() {
           {Object.keys(cp.territories).length > 0 && (
             <Text style={styles.terrCount}>{Object.keys(cp.territories).length}🏴</Text>
           )}
+          {cp.fingers < 10 && (
+            <Text style={[styles.fingerCount, {
+              color: cp.fingers <= 4 ? colors.red : cp.fingers <= 6 ? colors.yellow : colors.orangeLight,
+            }]}>✋ {cp.fingers}/10</Text>
+          )}
           <TouchableOpacity onPress={() => setSubPanel('help')} style={styles.helpBtn}>
             <Text style={styles.helpBtnText}>?</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Consignment status bar */}
+      {cp.consignment && conGang && (
+        <View style={[styles.consignmentBar, cp.consignment.turnsLeft <= 1 && styles.consignmentUrgent]}>
+          <Text style={[styles.consignmentText, cp.consignment.turnsLeft <= 1 && { color: colors.red }]}>
+            🤝 Owe {conGang.name} {$(cp.consignment.amountOwed - cp.consignment.amountPaid)} • ⏰ {cp.consignment.turnsLeft > 0 ? `${cp.consignment.turnsLeft} turn${cp.consignment.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'} • Return to {conLoc?.name || '???'}
+          </Text>
+        </View>
+      )}
 
       {/* Help panel */}
       {subPanel === 'help' && (
@@ -109,7 +126,7 @@ export function GameHeader() {
             <Text style={styles.helpText}>Visit a capital city (marked 🏦🦈) to deposit cash at 5%/day interest, or borrow from the shark at 10%/day. Every region's capital has both.</Text>
 
             <Text style={styles.helpTitle}>HEAT & COPS</Text>
-            <Text style={styles.helpText}>Buying and selling raises heat. High heat = more cop encounters. Bribe, run, or fight your way out.</Text>
+            <Text style={styles.helpText}>Buying and selling raises heat (max 100). High heat = more cop encounters (max 65%). Each region has different police forces with unique behaviors. Bribe, run, or fight your way out.</Text>
 
             <Text style={styles.helpTitle}>REPUTATION</Text>
             <Text style={styles.helpText}>Earn rep by making profitable trades. Higher rep unlocks international regions and new ranks:</Text>
@@ -128,11 +145,18 @@ export function GameHeader() {
               </Text>
             ))}
 
+            <Text style={styles.helpTitle}>CUSTOMS</Text>
+            <Text style={styles.helpText}>Flying between regions with drugs risks customs checks. Detection depends on destination strictness, amount carried, and heat. Contraband drugs are detected at 2x rate. Getting caught = drugs confiscated + fine.</Text>
+
             <Text style={styles.helpTitle}>GANGS & TERRITORY</Text>
             <Text style={styles.helpText}>Some cities are gang turf. Trade there to build relations. At 25+ rep you can claim territory for daily tribute income. Bad relations = taxes.</Text>
 
+            <Text style={styles.helpTitle}>CONSIGNMENT</Text>
+            <Text style={styles.helpText}>Gangs may offer drugs on credit (2x markup). You have 5 turns to sell and repay. Return to the gang's turf to settle. Pay 100% on time = respect. Partial = lose a finger. Late or short = worse. Don't pay? Bounty hunters come for you.</Text>
+            <Text style={styles.helpText}>Each lost finger: -5 inventory space, -3% sell revenue. At 6 fingers: +1 travel day. At 4: lose your gun. At 0: game over.</Text>
+
             <Text style={styles.helpTitle}>INFORMANTS</Text>
-            <Text style={styles.helpText}>At 10+ rep you may meet a rat who gives price tips. Pay them to keep loyalty up — low loyalty = they flip on you.</Text>
+            <Text style={styles.helpText}>At 10+ rep you may meet a rat who gives price tips. Pay them to keep loyalty up — low loyalty = they flip on you. Tips now predict future market events! Higher intel = more accurate.</Text>
           </ScrollView>
           <TouchableOpacity onPress={() => setSubPanel(null)} style={styles.helpClose}>
             <Text style={styles.helpCloseText}>CLOSE</Text>
@@ -144,7 +168,9 @@ export function GameHeader() {
       {cp.currentEvent && (
         <View style={[styles.eventBar, cp.currentEvent.type === 'spike' ? styles.eventSpike : styles.eventCrash]}>
           <Text style={[styles.eventText, { color: cp.currentEvent.type === 'spike' ? colors.redLight : colors.greenLight }]}>
-            {cp.currentEvent.type === 'spike' ? '📈' : '📉'} {cp.currentEvent.message}
+            {cp.currentEvent.type === 'spike' ? '📈' : '📉'}{' '}
+            {cp.currentEvent.regionId ? `${getRegion(cp.currentEvent.regionId)?.emoji || ''} ` : ''}
+            {cp.currentEvent.message}
           </Text>
         </View>
       )}
@@ -174,16 +200,23 @@ function OfferBanner() {
   const LOCS = LOCATIONS;
   let offerText = '';
   let offerCost = 0;
+  let isFree = false;
   if (o.type === 'gun') { offerText = `🔫 Piece for sale — ${$(o.price!)}`; offerCost = o.price!; }
   else if (o.type === 'coat') { offerText = `🧥 Bigger coat (+${o.space}) — ${$(o.price!)}`; offerCost = o.price!; }
   else if (o.type === 'rat') { offerText = `🐀 "${o.rat!.name}" wants to be your informant — ${$(o.rat!.cost)} (${o.rat!.personality})`; offerCost = o.rat!.cost; }
   else if (o.type === 'territory') { offerText = `🏴 Take over ${LOCS.find(l => l.id === o.locationId)?.name} — ${$(o.cost!)} (+${$(o.tribute!)}/day)`; offerCost = o.cost!; }
+  else if (o.type === 'consignment') {
+    const conGang = GANGS.find(g => g.id === o.gangId);
+    const conDrug = DRUGS.find(d => d.id === o.drugId);
+    offerText = `🤝 ${conGang?.name} offers ${o.quantity} ${conDrug?.emoji} ${conDrug?.name} on consignment — owe ${$(o.amountOwed!)} in 5 turns`;
+    isFree = true;
+  }
 
   return (
     <View style={styles.offerBar}>
       <Text style={styles.offerText}>{offerText}</Text>
       <View style={styles.offerButtons}>
-        <TouchableOpacity onPress={acceptOffer} disabled={cp.cash < offerCost} style={[styles.offerBtn, styles.acceptBtn]}>
+        <TouchableOpacity onPress={acceptOffer} disabled={!isFree && cp.cash < offerCost} style={[styles.offerBtn, styles.acceptBtn]}>
           <Text style={styles.offerBtnText}>Accept</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={declineOffer} style={[styles.offerBtn, styles.passBtn]}>
@@ -335,4 +368,20 @@ const styles = StyleSheet.create({
   acceptBtn: { backgroundColor: colors.indigoDark },
   passBtn: { backgroundColor: colors.cardBorder },
   offerBtnText: { color: '#cbd5e1', fontSize: 10, fontWeight: '600' },
+  fingerCount: { fontSize: 9, fontWeight: '700' },
+  consignmentBar: {
+    marginHorizontal: 8,
+    marginBottom: 3,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 5,
+    backgroundColor: 'rgba(234,179,8,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(234,179,8,0.15)',
+  },
+  consignmentUrgent: {
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderColor: 'rgba(239,68,68,0.2)',
+  },
+  consignmentText: { fontSize: 10, fontWeight: '600', color: colors.yellow },
 });

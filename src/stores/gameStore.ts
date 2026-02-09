@@ -3,7 +3,7 @@ import type { PlayerState, GamePhase, GameMode, TabId, TradeInfo, Offer } from '
 import {
   createPlayerState, travel as travelLogic, executeTrade, copAction,
   handleOffer, bankAction, payShark, borrowShark, payRat as payRatLogic,
-  inventoryCount, netWorth, checkMilestones,
+  inventoryCount, netWorth, checkMilestones, effectiveSpace,
   type SideEffect,
 } from '../lib/game-logic';
 import { getRank, DAYS, DRUGS, LOCATIONS } from '../constants/game';
@@ -89,7 +89,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   usedSpace: () => inventoryCount(get().currentPlayer().inventory),
   freeSpace: () => {
     const cp = get().currentPlayer();
-    return cp.space - inventoryCount(cp.inventory);
+    return effectiveSpace(cp) - inventoryCount(cp.inventory);
   },
   currentLocation: () => {
     const cp = get().currentPlayer();
@@ -251,7 +251,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const result = payRatLogic(cp);
     processEffects(result.effects, set);
     updatePlayer(s, result.player, set);
-    if (result.player !== cp) get().notify('Loyalty boosted.', 'info');
+    if (result.player !== cp) {
+      if (result.tipGenerated) {
+        get().notify('Loyalty boosted. Got a tip!', 'info');
+      } else {
+        get().notify('Loyalty boosted.', 'info');
+      }
+    }
   },
 
   setTab: (tab) => set({ activeTab: tab, subPanel: null }),
