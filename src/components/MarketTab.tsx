@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, DRUGS } from '../constants/game';
+import { $, DRUGS, LOCATIONS } from '../constants/game';
 import { inventoryCount } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
@@ -10,16 +10,20 @@ export function MarketTab() {
   const openTrade = useGameStore(s => s.openTrade);
   const bank = useGameStore(s => s.bank);
   const shark = useGameStore(s => s.shark);
+  const borrow = useGameStore(s => s.borrow);
   const subPanel = useGameStore(s => s.subPanel);
   const setSubPanel = useGameStore(s => s.setSubPanel);
 
   const used = inventoryCount(cp.inventory);
   const free = cp.space - used;
+  const loc = LOCATIONS.find(l => l.id === cp.location);
+  const hasBank = !!loc?.bank;
+  const hasShark = !!loc?.shark;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Bank & Shark buttons (only in Bronx) */}
-      {cp.location === 'bronx' && (
+      {/* Bank & Shark buttons (in any city with bank/shark) */}
+      {(hasBank || hasShark) && (
         <View style={styles.bankRow}>
           <TouchableOpacity
             style={[styles.bankBtn, subPanel === 'bk' && styles.bankBtnActive]}
@@ -43,14 +47,22 @@ export function MarketTab() {
       {/* Bank panel */}
       {subPanel === 'bk' && (
         <View style={styles.bankPanel}>
-          <Text style={styles.bankInfo}>Balance: <Text style={{ fontWeight: '700' }}>{$(cp.bank)}</Text> • 5%/day</Text>
+          <Text style={styles.bankInfo}>Balance: <Text style={{ fontWeight: '700' }}>{$(cp.bank)}</Text> • 5%/day interest</Text>
           <View style={styles.bankActions}>
             <TouchableOpacity style={styles.smBtn} onPress={() => bank('deposit', 'all')}>
               <Text style={styles.smBtnText}>Deposit All</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.smBtn} onPress={() => bank('deposit', Math.floor(cp.cash / 2))}>
+              <Text style={styles.smBtnText}>Deposit Half</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.smBtn} onPress={() => bank('withdraw', 'all')}>
               <Text style={styles.smBtnText}>Withdraw All</Text>
             </TouchableOpacity>
+            {cp.bank > 0 && (
+              <TouchableOpacity style={styles.smBtn} onPress={() => bank('withdraw', Math.floor(cp.bank / 2))}>
+                <Text style={styles.smBtnText}>Withdraw Half</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
@@ -58,15 +70,37 @@ export function MarketTab() {
       {/* Shark panel */}
       {subPanel === 'sk' && (
         <View style={styles.sharkPanel}>
-          <Text style={styles.sharkInfo}>Owe: <Text style={{ fontWeight: '700' }}>{$(cp.debt)}</Text> • 10%/day!</Text>
+          <Text style={styles.sharkInfo}>Debt: <Text style={{ fontWeight: '700' }}>{$(cp.debt)}</Text> • 10%/day interest!</Text>
+          <Text style={[styles.sharkInfo, { marginBottom: 4 }]}>Cash: <Text style={{ fontWeight: '700' }}>{$(cp.cash)}</Text></Text>
+          {cp.debt > 0 && (
+            <>
+              <Text style={styles.sharkSubLabel}>REPAY</Text>
+              <View style={styles.bankActions}>
+                <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDark }]} onPress={() => shark('all')}>
+                  <Text style={styles.smBtnText}>Pay All ({$(Math.min(cp.cash, cp.debt))})</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDarker }]} onPress={() => shark(Math.floor(Math.min(cp.cash, cp.debt) / 2))}>
+                  <Text style={styles.smBtnText}>Pay Half</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDarker }]} onPress={() => shark(1000)}>
+                  <Text style={styles.smBtnText}>Pay $1K</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+          <Text style={[styles.sharkSubLabel, { marginTop: 4 }]}>BORROW</Text>
           <View style={styles.bankActions}>
-            <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDark }]} onPress={() => shark('all')}>
-              <Text style={styles.smBtnText}>Pay All ({$(Math.min(cp.cash, cp.debt))})</Text>
+            <TouchableOpacity style={[styles.smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(1000)}>
+              <Text style={styles.smBtnText}>+$1,000</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDarker }]} onPress={() => shark(Math.floor(Math.min(cp.cash, cp.debt) / 2))}>
-              <Text style={styles.smBtnText}>Pay Half</Text>
+            <TouchableOpacity style={[styles.smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(5000)}>
+              <Text style={styles.smBtnText}>+$5,000</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(10000)}>
+              <Text style={styles.smBtnText}>+$10,000</Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.sharkWarn}>Interest compounds daily. Pay it off fast!</Text>
         </View>
       )}
 
@@ -177,7 +211,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(59,130,246,0.1)',
   },
   bankInfo: { fontSize: 9, color: colors.blueLight, marginBottom: 3 },
-  bankActions: { flexDirection: 'row', gap: 3 },
+  bankActions: { flexDirection: 'row', gap: 3, flexWrap: 'wrap' },
   sharkPanel: {
     padding: 6,
     backgroundColor: 'rgba(239,68,68,0.04)',
@@ -186,7 +220,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(239,68,68,0.1)',
   },
-  sharkInfo: { fontSize: 9, color: colors.redLight, marginBottom: 3 },
+  sharkInfo: { fontSize: 9, color: colors.redLight, marginBottom: 1 },
+  sharkSubLabel: { fontSize: 7, color: colors.textDark, letterSpacing: 1, marginBottom: 2 },
+  sharkWarn: { fontSize: 7, color: colors.textDark, marginTop: 4, fontStyle: 'italic' },
   smBtn: {
     backgroundColor: colors.cardBorder,
     borderRadius: 3,

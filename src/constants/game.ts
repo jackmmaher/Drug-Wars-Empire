@@ -1,4 +1,4 @@
-import type { Drug, Location, Gang, Rank, MarketEvent, Milestone, PlayerState } from '../types/game';
+import type { Drug, Location, Gang, Rank, MarketEvent, Milestone, PlayerState, Region } from '../types/game';
 
 // ── CONFIG ─────────────────────────────────────────────────
 export const DAYS = 30;
@@ -29,7 +29,17 @@ export const DRUGS: Drug[] = [
   { id: 'ludes', name: 'Ludes', emoji: '💊', min: 10, max: 60, tier: 1 },
 ];
 
+// ── REGIONS ───────────────────────────────────────────────
+export const REGIONS: Region[] = [
+  { id: 'nyc', name: 'New York', emoji: '🗽', color: '#ef4444', rep: 0, flyCost: 0, travelDays: 0, priceMultipliers: {}, gangId: '' },
+  { id: 'colombia', name: 'Colombia', emoji: '🇨🇴', color: '#dc2626', rep: 30, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.3, heroin: 0.8 }, gangId: 'car' },
+  { id: 'netherlands', name: 'Netherlands', emoji: '🇳🇱', color: '#f97316', rep: 50, flyCost: 5000, travelDays: 2, priceMultipliers: { ecstasy: 0.35, weed: 0.4, acid: 0.5 }, gangId: 'pen' },
+  { id: 'thailand', name: 'Thailand', emoji: '🇹🇭', color: '#14b8a6', rep: 40, flyCost: 4000, travelDays: 2, priceMultipliers: { heroin: 0.3, speed: 0.35 }, gangId: 'jao' },
+  { id: 'france', name: 'France', emoji: '🇫🇷', color: '#6366f1', rep: 60, flyCost: 4500, travelDays: 2, priceMultipliers: { heroin: 0.45, cocaine: 0.65 }, gangId: 'cor' },
+];
+
 // ── LOCATIONS ──────────────────────────────────────────────
+// NYC (kept as named export for backward compat)
 export const NYC: Location[] = [
   { id: 'bronx', name: 'The Bronx', emoji: '🏚️', color: '#ef4444', bank: true, shark: true, region: 'nyc' },
   { id: 'ghetto', name: 'The Ghetto', emoji: '🔥', color: '#a855f7', region: 'nyc' },
@@ -39,22 +49,76 @@ export const NYC: Location[] = [
   { id: 'brooklyn', name: 'Brooklyn', emoji: '🌉', color: '#ec4899', region: 'nyc' },
 ];
 
-export const INTL: Location[] = [
-  { id: 'bogota', name: 'Bogotá', emoji: '🇨🇴', color: '#dc2626', region: 'intl', rep: 30, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.3, heroin: 0.8 } },
-  { id: 'amsterdam', name: 'Amsterdam', emoji: '🇳🇱', color: '#f97316', region: 'intl', rep: 50, flyCost: 5000, travelDays: 2, priceMultipliers: { ecstasy: 0.35, weed: 0.4, acid: 0.5 } },
-  { id: 'bangkok', name: 'Bangkok', emoji: '🇹🇭', color: '#14b8a6', region: 'intl', rep: 40, flyCost: 4000, travelDays: 2, priceMultipliers: { heroin: 0.3, speed: 0.35 } },
-  { id: 'marseille', name: 'Marseille', emoji: '🇫🇷', color: '#6366f1', region: 'intl', rep: 60, flyCost: 4500, travelDays: 2, priceMultipliers: { heroin: 0.45, cocaine: 0.65 } },
+// Colombia
+const COLOMBIA: Location[] = [
+  { id: 'bogota', name: 'Bogot\u00e1', emoji: '🏛️', color: '#dc2626', bank: true, shark: true, region: 'colombia' },
+  { id: 'medellin', name: 'Medell\u00edn', emoji: '💀', color: '#991b1b', region: 'colombia' },
+  { id: 'cali', name: 'Cali', emoji: '🌴', color: '#b91c1c', region: 'colombia' },
+  { id: 'cartagena', name: 'Cartagena', emoji: '⚓', color: '#ef4444', region: 'colombia' },
+  { id: 'barranquilla', name: 'Barranquilla', emoji: '🏖️', color: '#f87171', region: 'colombia' },
+  { id: 'bucaramanga', name: 'Bucaramanga', emoji: '⛰️', color: '#fca5a5', region: 'colombia' },
 ];
 
-export const LOCATIONS: Location[] = [...NYC, ...INTL];
+// Netherlands
+const NETHERLANDS: Location[] = [
+  { id: 'amsterdam', name: 'Amsterdam', emoji: '🌷', color: '#f97316', bank: true, shark: true, region: 'netherlands' },
+  { id: 'rotterdam', name: 'Rotterdam', emoji: '🚢', color: '#ea580c', region: 'netherlands' },
+  { id: 'the_hague', name: 'The Hague', emoji: '⚖️', color: '#c2410c', region: 'netherlands' },
+  { id: 'utrecht', name: 'Utrecht', emoji: '🏰', color: '#fb923c', region: 'netherlands' },
+  { id: 'eindhoven', name: 'Eindhoven', emoji: '💡', color: '#fdba74', region: 'netherlands' },
+  { id: 'groningen', name: 'Groningen', emoji: '🌾', color: '#fed7aa', region: 'netherlands' },
+];
+
+// Thailand
+const THAILAND: Location[] = [
+  { id: 'bangkok', name: 'Bangkok', emoji: '🛕', color: '#14b8a6', bank: true, shark: true, region: 'thailand' },
+  { id: 'chiang_mai', name: 'Chiang Mai', emoji: '🏔️', color: '#0d9488', region: 'thailand' },
+  { id: 'phuket', name: 'Phuket', emoji: '🏝️', color: '#0f766e', region: 'thailand' },
+  { id: 'pattaya', name: 'Pattaya', emoji: '🌃', color: '#2dd4bf', region: 'thailand' },
+  { id: 'chiang_rai', name: 'Chiang Rai', emoji: '🔺', color: '#5eead4', region: 'thailand' },
+  { id: 'hat_yai', name: 'Hat Yai', emoji: '🌧️', color: '#99f6e4', region: 'thailand' },
+];
+
+// France
+const FRANCE: Location[] = [
+  { id: 'marseille', name: 'Marseille', emoji: '🚢', color: '#6366f1', bank: true, shark: true, region: 'france' },
+  { id: 'paris', name: 'Paris', emoji: '🗼', color: '#4f46e5', region: 'france' },
+  { id: 'lyon', name: 'Lyon', emoji: '🍷', color: '#4338ca', region: 'france' },
+  { id: 'nice', name: 'Nice', emoji: '🌊', color: '#818cf8', region: 'france' },
+  { id: 'toulouse', name: 'Toulouse', emoji: '🌹', color: '#a5b4fc', region: 'france' },
+  { id: 'bordeaux', name: 'Bordeaux', emoji: '🍇', color: '#c7d2fe', region: 'france' },
+];
+
+export const LOCATIONS: Location[] = [...NYC, ...COLOMBIA, ...NETHERLANDS, ...THAILAND, ...FRANCE];
 
 // ── GANGS ──────────────────────────────────────────────────
 export const GANGS: Gang[] = [
+  // NYC
   { id: 'col', name: 'The Colombians', emoji: '🐍', color: '#dc2626', turf: ['ghetto'] },
   { id: 'tri', name: 'The Triads', emoji: '🐉', color: '#f59e0b', turf: ['manhattan'] },
   { id: 'bra', name: 'The Bratva', emoji: '🐻', color: '#6366f1', turf: ['brooklyn'] },
-  { id: 'car', name: 'Medellín Cartel', emoji: '☠️', color: '#059669', turf: ['coney'] },
+  { id: 'lcn', name: 'La Cosa Nostra', emoji: '🎰', color: '#059669', turf: ['coney'] },
+  // International
+  { id: 'car', name: 'Medell\u00edn Cartel', emoji: '☠️', color: '#991b1b', turf: ['medellin', 'cali'] },
+  { id: 'pen', name: 'The Penose', emoji: '🌑', color: '#ea580c', turf: ['amsterdam', 'rotterdam'] },
+  { id: 'jao', name: 'Jao Pho', emoji: '🐅', color: '#0d9488', turf: ['bangkok', 'chiang_rai'] },
+  { id: 'cor', name: 'The Corsicans', emoji: '🗡️', color: '#4f46e5', turf: ['marseille', 'nice'] },
 ];
+
+// ── REGION HELPERS ─────────────────────────────────────────
+export function getRegion(regionId: string): Region | undefined {
+  return REGIONS.find(r => r.id === regionId);
+}
+
+export function getRegionLocations(regionId: string): Location[] {
+  return LOCATIONS.filter(l => l.region === regionId);
+}
+
+export function getRegionForLocation(locationId: string): Region | undefined {
+  const loc = LOCATIONS.find(l => l.id === locationId);
+  if (!loc) return undefined;
+  return REGIONS.find(r => r.id === loc.region);
+}
 
 // ── RANKS ──────────────────────────────────────────────────
 export const RANKS: Rank[] = [

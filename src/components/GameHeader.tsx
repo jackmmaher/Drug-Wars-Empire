@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, DAYS, LOCATIONS, getRank } from '../constants/game';
+import { $, DAYS, LOCATIONS, getRank, getRegionForLocation } from '../constants/game';
 import { inventoryCount, netWorth } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
@@ -17,6 +17,8 @@ export function GameHeader() {
   const used = inventoryCount(cp.inventory);
   const free = cp.space - used;
   const loc = LOCATIONS.find(l => l.id === cp.location);
+  const region = getRegionForLocation(cp.location);
+  const isAbroad = region && region.id !== 'nyc';
 
   return (
     <View style={styles.container}>
@@ -76,7 +78,9 @@ export function GameHeader() {
       {/* Location */}
       <View style={styles.locationBar}>
         <View style={[styles.locationDot, { backgroundColor: loc?.color }]} />
-        <Text style={styles.locationName}>{loc?.emoji} {loc?.name}</Text>
+        <Text style={styles.locationName}>
+          {isAbroad ? `${region.emoji} ${region.name} > ` : ''}{loc?.emoji} {loc?.name}
+        </Text>
         {cp.territories[cp.location] && (
           <Text style={styles.tributeText}>🏴 +{$(cp.territories[cp.location].tribute)}/d</Text>
         )}

@@ -73,9 +73,9 @@ export function IntelTab() {
           <Text style={styles.gangEmoji}>{g.emoji}</Text>
           <Text style={[styles.gangName, { color: g.color }]}>{g.name}</Text>
           <Text style={[styles.gangStatus, {
-            color: cp.gangRelations[g.id] > 10 ? colors.green : cp.gangRelations[g.id] < -10 ? colors.red : colors.textMuted,
+            color: (cp.gangRelations[g.id] ?? 0) > 10 ? colors.green : (cp.gangRelations[g.id] ?? 0) < -10 ? colors.red : colors.textMuted,
           }]}>
-            {cp.gangRelations[g.id] > 10 ? 'Allied' : cp.gangRelations[g.id] < -10 ? 'Hostile' : 'Neutral'}
+            {(cp.gangRelations[g.id] ?? 0) > 10 ? 'Allied' : (cp.gangRelations[g.id] ?? 0) < -10 ? 'Hostile' : 'Neutral'}
           </Text>
         </View>
       ))}

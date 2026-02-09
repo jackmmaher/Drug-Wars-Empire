@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { PlayerState, GamePhase, GameMode, TabId, TradeInfo, Offer } from '../types/game';
 import {
   createPlayerState, travel as travelLogic, executeTrade, copAction,
-  handleOffer, bankAction, payShark, payRat as payRatLogic,
+  handleOffer, bankAction, payShark, borrowShark, payRat as payRatLogic,
   inventoryCount, netWorth, checkMilestones,
   type SideEffect,
 } from '../lib/game-logic';
@@ -52,6 +52,7 @@ interface GameStore {
   declineOffer: () => void;
   bank: (action: 'deposit' | 'withdraw', amount: number | 'all') => void;
   shark: (amount: number | 'all') => void;
+  borrow: (amount: number) => void;
   payRat: () => void;
   setTab: (tab: TabId) => void;
   setSubPanel: (panel: string | null) => void;
@@ -234,6 +235,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get();
     const cp = s.currentPlayer();
     const result = payShark(cp, amount);
+    updatePlayer(s, result, set);
+  },
+
+  borrow: (amount) => {
+    const s = get();
+    const cp = s.currentPlayer();
+    const result = borrowShark(cp, amount);
     updatePlayer(s, result, set);
   },
 

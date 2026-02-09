@@ -9,18 +9,26 @@ export interface Drug {
   tier: number;
 }
 
+export interface Region {
+  id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  rep: number;
+  flyCost: number;
+  travelDays: number;
+  priceMultipliers: Record<string, number>;
+  gangId: string;
+}
+
 export interface Location {
   id: string;
   name: string;
   emoji: string;
   color: string;
-  region: 'nyc' | 'intl';
+  region: string;
   bank?: boolean;
   shark?: boolean;
-  rep?: number;
-  flyCost?: number;
-  travelDays?: number;
-  priceMultipliers?: Record<string, number>;
 }
 
 export interface Gang {

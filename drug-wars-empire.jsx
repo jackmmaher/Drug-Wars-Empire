@@ -52,6 +52,14 @@ const DRUGS = [
   { id:"ludes",name:"Ludes",e:"💊",min:10,max:60,t:1 },
 ];
 
+const REGIONS = [
+  { id:"nyc",name:"New York",em:"🗽",c:"#ef4444",rep:0,fly:0,td:0,pm:{} },
+  { id:"colombia",name:"Colombia",em:"🇨🇴",c:"#dc2626",rep:30,fly:3000,td:2,pm:{cocaine:0.3,heroin:0.8} },
+  { id:"netherlands",name:"Netherlands",em:"🇳🇱",c:"#f97316",rep:50,fly:5000,td:2,pm:{ecstasy:0.35,weed:0.4,acid:0.5} },
+  { id:"thailand",name:"Thailand",em:"🇹🇭",c:"#14b8a6",rep:40,fly:4000,td:2,pm:{heroin:0.3,speed:0.35} },
+  { id:"france",name:"France",em:"🇫🇷",c:"#6366f1",rep:60,fly:4500,td:2,pm:{heroin:0.45,cocaine:0.65} },
+];
+
 const NYC = [
   { id:"bronx",name:"The Bronx",e:"🏚️",c:"#ef4444",bank:true,shark:true,r:"nyc" },
   { id:"ghetto",name:"The Ghetto",e:"🔥",c:"#a855f7",r:"nyc" },
@@ -60,20 +68,51 @@ const NYC = [
   { id:"coney",name:"Coney Island",e:"🎡",c:"#f59e0b",r:"nyc" },
   { id:"brooklyn",name:"Brooklyn",e:"🌉",c:"#ec4899",r:"nyc" },
 ];
-
-const INTL = [
-  { id:"bogota",name:"Bogotá",e:"🇨🇴",c:"#dc2626",r:"intl",rep:30,fly:3000,td:2,pm:{cocaine:0.3,heroin:0.8} },
-  { id:"amsterdam",name:"Amsterdam",e:"🇳🇱",c:"#f97316",r:"intl",rep:50,fly:5000,td:2,pm:{ecstasy:0.35,weed:0.4,acid:0.5} },
-  { id:"bangkok",name:"Bangkok",e:"🇹🇭",c:"#14b8a6",r:"intl",rep:40,fly:4000,td:2,pm:{heroin:0.3,speed:0.35} },
-  { id:"marseille",name:"Marseille",e:"🇫🇷",c:"#6366f1",r:"intl",rep:60,fly:4500,td:2,pm:{heroin:0.45,cocaine:0.65} },
+const COLOMBIA = [
+  { id:"bogota",name:"Bogotá",e:"🏛️",c:"#dc2626",bank:true,shark:true,r:"colombia" },
+  { id:"medellin",name:"Medellín",e:"💀",c:"#991b1b",r:"colombia" },
+  { id:"cali",name:"Cali",e:"🌴",c:"#b91c1c",r:"colombia" },
+  { id:"cartagena",name:"Cartagena",e:"⚓",c:"#ef4444",r:"colombia" },
+  { id:"barranquilla",name:"Barranquilla",e:"🏖️",c:"#f87171",r:"colombia" },
+  { id:"bucaramanga",name:"Bucaramanga",e:"⛰️",c:"#fca5a5",r:"colombia" },
 ];
-const LOCS = [...NYC,...INTL];
+const NETH = [
+  { id:"amsterdam",name:"Amsterdam",e:"🌷",c:"#f97316",bank:true,shark:true,r:"netherlands" },
+  { id:"rotterdam",name:"Rotterdam",e:"🚢",c:"#ea580c",r:"netherlands" },
+  { id:"the_hague",name:"The Hague",e:"⚖️",c:"#c2410c",r:"netherlands" },
+  { id:"utrecht",name:"Utrecht",e:"🏰",c:"#fb923c",r:"netherlands" },
+  { id:"eindhoven",name:"Eindhoven",e:"💡",c:"#fdba74",r:"netherlands" },
+  { id:"groningen",name:"Groningen",e:"🌾",c:"#fed7aa",r:"netherlands" },
+];
+const THAI = [
+  { id:"bangkok",name:"Bangkok",e:"🛕",c:"#14b8a6",bank:true,shark:true,r:"thailand" },
+  { id:"chiang_mai",name:"Chiang Mai",e:"🏔️",c:"#0d9488",r:"thailand" },
+  { id:"phuket",name:"Phuket",e:"🏝️",c:"#0f766e",r:"thailand" },
+  { id:"pattaya",name:"Pattaya",e:"🌃",c:"#2dd4bf",r:"thailand" },
+  { id:"chiang_rai",name:"Chiang Rai",e:"🔺",c:"#5eead4",r:"thailand" },
+  { id:"hat_yai",name:"Hat Yai",e:"🌧️",c:"#99f6e4",r:"thailand" },
+];
+const FRAN = [
+  { id:"marseille",name:"Marseille",e:"🚢",c:"#6366f1",bank:true,shark:true,r:"france" },
+  { id:"paris",name:"Paris",e:"🗼",c:"#4f46e5",r:"france" },
+  { id:"lyon",name:"Lyon",e:"🍷",c:"#4338ca",r:"france" },
+  { id:"nice",name:"Nice",e:"🌊",c:"#818cf8",r:"france" },
+  { id:"toulouse",name:"Toulouse",e:"🌹",c:"#a5b4fc",r:"france" },
+  { id:"bordeaux",name:"Bordeaux",e:"🍇",c:"#c7d2fe",r:"france" },
+];
+const LOCS = [...NYC,...COLOMBIA,...NETH,...THAI,...FRAN];
+const getRegion = lid => { const l=LOCS.find(x=>x.id===lid); return l?REGIONS.find(r=>r.id===l.r):REGIONS[0]; };
+const getRegionLocs = rid => LOCS.filter(l=>l.r===rid);
 
 const GANGS = [
   { id:"col",name:"The Colombians",e:"🐍",c:"#dc2626",turf:["ghetto"] },
   { id:"tri",name:"The Triads",e:"🐉",c:"#f59e0b",turf:["manhattan"] },
   { id:"bra",name:"The Bratva",e:"🐻",c:"#6366f1",turf:["brooklyn"] },
-  { id:"car",name:"Medellín Cartel",e:"☠️",c:"#059669",turf:["coney"] },
+  { id:"lcn",name:"La Cosa Nostra",e:"🎰",c:"#059669",turf:["coney"] },
+  { id:"car",name:"Medellín Cartel",e:"☠️",c:"#991b1b",turf:["medellin","cali"] },
+  { id:"pen",name:"The Penose",e:"🌑",c:"#ea580c",turf:["amsterdam","rotterdam"] },
+  { id:"jao",name:"Jao Pho",e:"🐅",c:"#0d9488",turf:["bangkok","chiang_rai"] },
+  { id:"cor",name:"The Corsicans",e:"🗡️",c:"#4f46e5",turf:["marseille","nice"] },
 ];
 
 const RANKS = [
@@ -124,13 +163,14 @@ const MILES = [
 function getRank(rep) { let r=RANKS[0]; for(const x of RANKS) if(rep>=x.r) r=x; return r; }
 
 function genP(loc, ev) {
-  const l = LOCS.find(x=>x.id===loc);
+  const reg = getRegion(loc);
+  const pm = reg?.pm || {};
   const p = {};
   DRUGS.forEach(d => {
     if(C(0.12)){p[d.id]=null;return;}
     let pr = R(d.min,d.max);
-    if(l?.pm?.[d.id]) pr = Math.round(pr*l.pm[d.id]);
-    if(ev && ev.d===d.id) { pr = Math.round(d.min*ev.x + Math.random()*d.min*0.15); if(l?.pm?.[d.id]) pr=Math.round(pr*l.pm[d.id]); }
+    if(pm[d.id]) pr = Math.round(pr*pm[d.id]);
+    if(ev && ev.d===d.id) { pr = Math.round(d.min*ev.x + Math.random()*d.min*0.15); if(pm[d.id]) pr=Math.round(pr*pm[d.id]); }
     p[d.id] = Math.max(1,pr);
   });
   return p;
@@ -144,7 +184,7 @@ function init(mode="solo") {
     day:1,cash:CASH0,debt:DEBT0,bank:0,loc:"bronx",inv:{},spc:SPACE0,
     prices:genP("bronx",ev),prev:{},gun:false,hp:100,heat:0,
     rep:0,profit:0,best:0,trades:0,strk:0,mstrk:0,combo:1,
-    avg:{},terr:{},gang:{col:0,tri:0,bra:0,car:0},
+    avg:{},terr:{},gang:Object.fromEntries(GANGS.map(g=>[g.id,0])),
     rat:mkRat(),ev:ev,evs:ev?[{d:1,m:ev.m,t:ev.t}]:[],
     nms:[],offer:null,cops:null,trib:0,intl:false,
     close:0,miles:[],newMile:null,
@@ -193,16 +233,32 @@ export default function App() {
     if(lid===cp.loc) return;
     SFX.tick();
     const dest=LOCS.find(l=>l.id===lid);
-    if(dest.r==="intl") {
-      if(cp.rep<dest.rep){notify(`Need ${dest.rep} rep to unlock ${dest.name}.`,"danger");return;}
-      if(cp.cash<dest.fly){notify(`Flight costs ${$(dest.fly)}.`,"danger");return;}
+    const srcReg=getRegion(cp.loc);
+    const destReg=getRegion(lid);
+    const isInterRegion=srcReg.id!==destReg.id;
+    if(isInterRegion && destReg.id!=="nyc") {
+      if(cp.rep<destReg.rep){notify(`Need ${destReg.rep} rep to unlock ${destReg.name}.`,"danger");return;}
+      if(cp.cash<destReg.fly){notify(`Flight costs ${$(destReg.fly)}.`,"danger");return;}
+    } else if(isInterRegion && destReg.id==="nyc" && srcReg.id!=="nyc") {
+      const rc=Math.round(srcReg.fly/2);
+      if(cp.cash<rc){notify(`Return flight costs ${$(rc)}.`,"danger");return;}
     }
     sGs(prev => {
       const p = prev.mode==="2p" ? {...prev[prev.turn===1?"p1":"p2"]} : {...prev};
-      const td = dest.td||1;
+      const td = isInterRegion ? (destReg.id==="nyc"?srcReg.td:destReg.td) : 1;
       p.day+=td;
-      if(dest.r==="intl"){p.cash-=dest.fly;p.intl=true;}
-      p.loc=lid;
+      if(isInterRegion){
+        if(destReg.id==="nyc") p.cash-=Math.round(srcReg.fly/2);
+        else p.cash-=destReg.fly;
+        p.intl=true;
+      }
+      // Land at capital when flying to a region
+      if(isInterRegion){
+        const rl=getRegionLocs(destReg.id);
+        p.loc=rl[0].id;
+      } else {
+        p.loc=lid;
+      }
       p.debt=Math.round(p.debt*Math.pow(1+DINT,td));
       p.bank=Math.round(p.bank*Math.pow(1+BINT,td));
       p.heat=Math.max(0,p.heat-R(3,10));
@@ -211,7 +267,7 @@ export default function App() {
       p.trib=trib; p.cash+=trib*td;
       // Market
       const ev=C(0.38)?EVTS[R(0,EVTS.length-1)]:null;
-      p.ev=ev; p.prev={...p.prices}; p.prices=genP(lid,ev);
+      p.ev=ev; p.prev={...p.prices}; p.prices=genP(p.loc,ev);
       if(ev) p.evs=[...p.evs,{d:p.day,m:ev.m,t:ev.t}];
       // NEAR MISS — only for drugs you no longer hold (sold too early)
       const nms=[];
@@ -224,8 +280,8 @@ export default function App() {
       }
       p.recentSold=[];
       // Gang tax
-      const lg=GANGS.find(g=>g.turf.includes(lid));
-      if(lg&&!p.terr[lid]&&p.gang[lg.id]<-15&&C(0.3)){
+      const lg=GANGS.find(g=>g.turf.includes(p.loc));
+      if(lg&&!p.terr[p.loc]&&(p.gang[lg.id]??0)<-15&&C(0.3)){
         const tax=Math.round(p.cash*R(5,18)/100);p.cash-=tax;
         p.evs=[...p.evs,{d:p.day,m:`${lg.e} ${lg.name} taxed you ${$(tax)}!`,t:"danger"}];shake();
       }
@@ -243,7 +299,7 @@ export default function App() {
         }
       }
       // Cops
-      const cc=0.12+p.heat/350+(dest.r==="intl"?0.1:0);
+      const cc=0.12+p.heat/350+(isInterRegion?0.1:0);
       if(C(cc)&&used>0){
         p.cops={n:R(1,2+Math.floor(p.heat/30)),br:R(400,1500)};
         if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"cop"};
@@ -256,9 +312,9 @@ export default function App() {
       if(!p.gun&&C(0.14)) p.offer={type:"gun",price:R(300,600)};
       else if(C(0.12)){const sp=R(20,35);p.offer={type:"coat",price:R(150,400),sp};}
       else if(!p.rat.hired&&C(0.08)&&p.rep>=10) p.offer={type:"rat",rat:mkRat()};
-      else if(p.rep>=25&&C(0.1)&&!p.terr[lid]){
-        const lg2=GANGS.find(g=>g.turf.includes(lid));
-        if(!lg2||p.gang[lg2.id]>5) p.offer={type:"terr",lid,cost:R(3000,12000),tr:R(100,500)};
+      else if(p.rep>=25&&C(0.1)&&!p.terr[p.loc]){
+        const lg2=GANGS.find(g=>g.turf.includes(p.loc));
+        if(!lg2||(p.gang[lg2.id]??0)>5) p.offer={type:"terr",lid:p.loc,cost:R(3000,12000),tr:R(100,500)};
       }
       // Milestones
       const{miles,newMile}=chkMiles(p);p.miles=miles;p.newMile=newMile;
@@ -368,6 +424,7 @@ export default function App() {
 
   function bk(t,a){scp(p=>{const v=a==="all"?(t==="dep"?p.cash:p.bank):Math.max(0,parseInt(a)||0);if(t==="dep"){const x=Math.min(v,p.cash);return{cash:p.cash-x,bank:p.bank+x};}else{const x=Math.min(v,p.bank);return{cash:p.cash+x,bank:p.bank-x};}});}
   function sk(a){scp(p=>{const v=a==="all"?Math.min(p.cash,p.debt):Math.min(parseInt(a)||0,p.cash,p.debt);const r={cash:p.cash-v,debt:p.debt-v};const{miles}=chkMiles({...p,...r});return{...r,miles};});}
+  function skBorrow(a){scp(p=>({cash:p.cash+Math.max(0,a),debt:p.debt+Math.max(0,a)}));}
   function payRat(){scp(p=>{if(p.cash<150)return{};return{cash:p.cash-150,rat:{...p.rat,loy:Math.min(100,p.rat.loy+R(5,12))}};}); notify("Loyalty boosted.","info");}
 
   // ════════════════════════════════════════════════════════
@@ -533,7 +590,7 @@ export default function App() {
         {/* LOCATION */}
         <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 12px"}}>
           <div style={{width:7,height:7,borderRadius:"50%",background:loc.c,boxShadow:`0 0 6px ${loc.c}44`}}/>
-          <span style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{loc.e} {loc.name}</span>
+          <span style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{getRegion(cp.loc)?.id!=="nyc"?`${getRegion(cp.loc).em} ${getRegion(cp.loc).name} > `:""}{loc.e} {loc.name}</span>
           {cp.terr[cp.loc]&&<span style={{fontSize:8,color:"#22c55e"}}>🏴 +{$(cp.terr[cp.loc].tr)}/d</span>}
           <div style={{marginLeft:"auto",display:"flex",gap:3}}>
             {cp.gun&&<span>🔫</span>}{cp.rat.hired&&cp.rat.alive&&<span title={`${cp.rat.name} ${cp.rat.loy}%`}>🐀</span>}
@@ -566,17 +623,22 @@ export default function App() {
 
         {/* ── MARKET ── */}
         {ui.tab==="market"&&<div style={{padding:"3px 8px 6px"}}>
-          {cp.loc==="bronx"&&<div style={{display:"flex",gap:4,marginBottom:4}}>
+          {(loc?.bank||loc?.shark)&&<div style={{display:"flex",gap:4,marginBottom:4}}>
             <button onClick={()=>sUi(u=>({...u,sub:u.sub==="bk"?null:"bk"}))} style={{...Z.sm,flex:1,background:ui.sub==="bk"?"#1e40af":"rgba(59,130,246,0.08)",color:"#93c5fd"}}>🏦 Bank {cp.bank>0&&<small style={{opacity:.6}}>({$(cp.bank)})</small>}</button>
             <button onClick={()=>sUi(u=>({...u,sub:u.sub==="sk"?null:"sk"}))} style={{...Z.sm,flex:1,background:ui.sub==="sk"?"#7f1d1d":"rgba(239,68,68,0.06)",color:"#fca5a5"}}>🦈 Shark {cp.debt>0&&<small style={{opacity:.6}}>({$(cp.debt)})</small>}</button>
           </div>}
           {ui.sub==="bk"&&<div style={{padding:6,background:"rgba(59,130,246,0.04)",borderRadius:5,marginBottom:4,border:"1px solid rgba(59,130,246,0.1)"}}>
-            <div style={{fontSize:9,color:"#93c5fd",marginBottom:3}}>Balance: <b>{$(cp.bank)}</b> • 5%/day</div>
-            <div style={{display:"flex",gap:3}}><button onClick={()=>bk("dep","all")} style={Z.sm}>Deposit All</button><button onClick={()=>bk("wd","all")} style={Z.sm}>Withdraw All</button></div>
+            <div style={{fontSize:9,color:"#93c5fd",marginBottom:3}}>Balance: <b>{$(cp.bank)}</b> • 5%/day interest</div>
+            <div style={{display:"flex",gap:3,flexWrap:"wrap"}}><button onClick={()=>bk("dep","all")} style={Z.sm}>Deposit All</button><button onClick={()=>bk("dep",String(Math.floor(cp.cash/2)))} style={Z.sm}>Deposit Half</button><button onClick={()=>bk("wd","all")} style={Z.sm}>Withdraw All</button>{cp.bank>0&&<button onClick={()=>bk("wd",String(Math.floor(cp.bank/2)))} style={Z.sm}>Withdraw Half</button>}</div>
           </div>}
           {ui.sub==="sk"&&<div style={{padding:6,background:"rgba(239,68,68,0.04)",borderRadius:5,marginBottom:4,border:"1px solid rgba(239,68,68,0.1)"}}>
-            <div style={{fontSize:9,color:"#fca5a5",marginBottom:3}}>Owe: <b>{$(cp.debt)}</b> • 10%/day!</div>
-            <div style={{display:"flex",gap:3}}><button onClick={()=>sk("all")} style={{...Z.sm,background:"#dc2626"}}>Pay All ({$(Math.min(cp.cash,cp.debt))})</button><button onClick={()=>sk(String(Math.floor(Math.min(cp.cash,cp.debt)/2)))} style={{...Z.sm,background:"#991b1b"}}>Pay Half</button></div>
+            <div style={{fontSize:9,color:"#fca5a5",marginBottom:1}}>Debt: <b>{$(cp.debt)}</b> • 10%/day interest!</div>
+            <div style={{fontSize:9,color:"#fca5a5",marginBottom:4}}>Cash: <b>{$(cp.cash)}</b></div>
+            {cp.debt>0&&<><div style={{fontSize:7,color:"#334155",letterSpacing:1,marginBottom:2}}>REPAY</div>
+            <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:4}}><button onClick={()=>sk("all")} style={{...Z.sm,background:"#dc2626"}}>Pay All ({$(Math.min(cp.cash,cp.debt))})</button><button onClick={()=>sk(String(Math.floor(Math.min(cp.cash,cp.debt)/2)))} style={{...Z.sm,background:"#991b1b"}}>Pay Half</button><button onClick={()=>sk("1000")} style={{...Z.sm,background:"#991b1b"}}>Pay $1K</button></div></>}
+            <div style={{fontSize:7,color:"#334155",letterSpacing:1,marginBottom:2}}>BORROW</div>
+            <div style={{display:"flex",gap:3,flexWrap:"wrap"}}><button onClick={()=>skBorrow(1000)} style={{...Z.sm,background:"#4c1d95"}}>+$1,000</button><button onClick={()=>skBorrow(5000)} style={{...Z.sm,background:"#4c1d95"}}>+$5,000</button><button onClick={()=>skBorrow(10000)} style={{...Z.sm,background:"#4c1d95"}}>+$10,000</button></div>
+            <div style={{fontSize:7,color:"#334155",marginTop:4,fontStyle:"italic"}}>Interest compounds daily. Pay it off fast!</div>
           </div>}
           <div style={{display:"flex",flexDirection:"column",gap:1}}>
             {DRUGS.map(d=>{
@@ -605,10 +667,10 @@ export default function App() {
         </div>}
 
         {/* ── MAP ── */}
-        {ui.tab==="map"&&<div style={{padding:"4px 8px"}}>
-          <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>NEW YORK</div>
+        {ui.tab==="map"&&(()=>{const curReg=getRegion(cp.loc);const regLocs=getRegionLocs(curReg.id);const others=REGIONS.filter(r=>r.id!==curReg.id);return<div style={{padding:"4px 8px"}}>
+          <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>{curReg.em} {curReg.name.toUpperCase()}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:8}}>
-            {NYC.map(l=>{const cur=l.id===cp.loc;const own=!!cp.terr[l.id];const g=GANGS.find(x=>x.turf.includes(l.id));return(
+            {regLocs.map(l=>{const cur=l.id===cp.loc;const own=!!cp.terr[l.id];const g=GANGS.find(x=>x.turf.includes(l.id));return(
               <button key={l.id} onClick={()=>travel(l.id)} disabled={cur} style={{background:cur?`${l.c}15`:own?"rgba(34,197,94,0.04)":`${l.c}06`,border:`1px solid ${cur?l.c+"35":own?"#22c55e22":l.c+"12"}`,borderRadius:5,padding:"6px 3px",textAlign:"center",color:cur?l.c:"#94a3b8",fontSize:10,fontWeight:cur?800:600,cursor:cur?"default":"pointer",opacity:cur?.5:1,fontFamily:"inherit"}}>
                 <div style={{fontSize:14,marginBottom:1}}>{l.e}</div>{l.name}
                 {own&&<div style={{fontSize:7,color:"#22c55e"}}>🏴 Yours</div>}
@@ -617,19 +679,19 @@ export default function App() {
               </button>
             );})}
           </div>
-          <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>INTERNATIONAL</div>
+          <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>✈️ FLY TO</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-            {INTL.map(l=>{const ok=cp.rep>=l.rep;const cur=l.id===cp.loc;return(
-              <button key={l.id} onClick={()=>travel(l.id)} disabled={cur||!ok} style={{background:ok?(cur?`${l.c}15`:`${l.c}06`):"rgba(255,255,255,0.01)",border:`1px solid ${ok?l.c+"18":"#ffffff06"}`,borderRadius:5,padding:"6px",textAlign:"center",color:ok?(cur?l.c:"#94a3b8"):"#1e293b",fontSize:10,fontWeight:600,fontFamily:"inherit",cursor:ok&&!cur?"pointer":"default",opacity:ok?(cur?.5:1):.3}}>
-                <span style={{fontSize:14}}>{l.e}</span><div>{l.name}</div>
-                {!ok&&<div style={{fontSize:7,color:"#334155"}}>🔒 {l.rep} rep</div>}
-                {ok&&<div style={{fontSize:7,color:"#475569"}}>✈️ {$(l.fly)} • {l.td}d</div>}
-                {ok&&l.pm&&<div style={{fontSize:6,color:"#334155"}}>{Object.entries(l.pm).map(([d,m])=>`${DRUGS.find(x=>x.id===d)?.e}${Math.round((1-m)*100)}%↓`).join(" ")}</div>}
+            {others.map(r=>{const isNyc=r.id==="nyc";const cost=isNyc?Math.round((curReg.fly||0)/2):r.fly;const repN=isNyc?0:r.rep;const ok=cp.rep>=repN;return(
+              <button key={r.id} onClick={()=>{const tl=getRegionLocs(r.id);if(tl.length)travel(tl[0].id);}} disabled={!ok} style={{background:ok?`${r.c}06`:"rgba(255,255,255,0.01)",border:`1px solid ${ok?r.c+"18":"#ffffff06"}`,borderRadius:5,padding:"6px",textAlign:"center",color:ok?"#94a3b8":"#1e293b",fontSize:10,fontWeight:600,fontFamily:"inherit",cursor:ok?"pointer":"default",opacity:ok?1:.3}}>
+                <span style={{fontSize:14}}>{r.em}</span><div>{r.name}</div>
+                {!ok&&<div style={{fontSize:7,color:"#334155"}}>🔒 {repN} rep</div>}
+                {ok&&<div style={{fontSize:7,color:"#475569"}}>✈️ {$(cost)} • {isNyc?(curReg.td||2):r.td}d</div>}
+                {ok&&!isNyc&&Object.keys(r.pm).length>0&&<div style={{fontSize:6,color:"#334155"}}>{Object.entries(r.pm).map(([d,m])=>`${DRUGS.find(x=>x.id===d)?.e}${Math.round((1-m)*100)}%↓`).join(" ")}</div>}
               </button>
             );})}
           </div>
           {gs.mode==="2p"&&<button onClick={()=>sGs(p=>({...p,turn:p.turn===1?2:1}))} style={{...Z.pri,width:"100%",marginTop:10,background:"linear-gradient(135deg,#6366f1,#4338ca)"}}>END TURN → P{gs.turn===1?2:1}</button>}
-        </div>}
+        </div>;})()}
 
         {/* ── INTEL ── */}
         {ui.tab==="intel"&&<div style={{padding:"4px 8px"}}>
@@ -662,7 +724,7 @@ export default function App() {
             {GANGS.map(g=><div key={g.id} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 0"}}>
               <span style={{fontSize:12}}>{g.e}</span>
               <span style={{fontSize:10,color:g.c,flex:1}}>{g.name}</span>
-              <span style={{fontSize:9,color:cp.gang[g.id]>10?"#22c55e":cp.gang[g.id]<-10?"#ef4444":"#475569",fontWeight:600}}>{cp.gang[g.id]>10?"Allied":cp.gang[g.id]<-10?"Hostile":"Neutral"}</span>
+              <span style={{fontSize:9,color:(cp.gang[g.id]??0)>10?"#22c55e":(cp.gang[g.id]??0)<-10?"#ef4444":"#475569",fontWeight:600}}>{(cp.gang[g.id]??0)>10?"Allied":(cp.gang[g.id]??0)<-10?"Hostile":"Neutral"}</span>
             </div>)}
           </div>
           {/* Milestones */}

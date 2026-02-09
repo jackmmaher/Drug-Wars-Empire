@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { colors } from '../constants/theme';
-import { $, NYC, INTL, GANGS, DRUGS } from '../constants/game';
+import { $, GANGS, DRUGS, REGIONS, LOCATIONS, getRegionForLocation, getRegionLocations } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 
 export function MapTab() {
@@ -11,12 +11,18 @@ export function MapTab() {
   const travelAction = useGameStore(s => s.travel);
   const endTurn = useGameStore(s => s.endTurn);
 
+  const currentRegion = getRegionForLocation(cp.location);
+  const regionLocs = currentRegion ? getRegionLocations(currentRegion.id) : [];
+  const otherRegions = REGIONS.filter(r => r.id !== currentRegion?.id);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* NYC */}
-      <Text style={styles.sectionLabel}>NEW YORK</Text>
+      {/* Current Region */}
+      <Text style={styles.sectionLabel}>
+        {currentRegion?.emoji} {currentRegion?.name?.toUpperCase() || 'NEW YORK'}
+      </Text>
       <View style={styles.nycGrid}>
-        {NYC.map(l => {
+        {regionLocs.map(l => {
           const cur = l.id === cp.location;
           const own = !!cp.territories[l.id];
           const g = GANGS.find(x => x.turf.includes(l.id));
@@ -45,37 +51,43 @@ export function MapTab() {
         })}
       </View>
 
-      {/* International */}
-      <Text style={styles.sectionLabel}>INTERNATIONAL</Text>
+      {/* Fly To */}
+      <Text style={styles.sectionLabel}>✈️ FLY TO</Text>
       <View style={styles.intlGrid}>
-        {INTL.map(l => {
-          const ok = cp.rep >= (l.rep || 0);
-          const cur = l.id === cp.location;
+        {otherRegions.map(r => {
+          const isNyc = r.id === 'nyc';
+          const flyCost = isNyc ? Math.round((currentRegion?.flyCost || 0) / 2) : r.flyCost;
+          const repNeeded = isNyc ? 0 : r.rep;
+          const ok = cp.rep >= repNeeded;
           return (
             <TouchableOpacity
-              key={l.id}
-              onPress={() => travelAction(l.id)}
-              disabled={cur || !ok}
+              key={r.id}
+              onPress={() => {
+                // Travel to the first city in the target region
+                const targetLocs = getRegionLocations(r.id);
+                if (targetLocs.length > 0) travelAction(targetLocs[0].id);
+              }}
+              disabled={!ok}
               style={[
                 styles.intlBtn,
                 ok ? {
-                  backgroundColor: cur ? l.color + '15' : l.color + '06',
-                  borderColor: l.color + '18',
+                  backgroundColor: r.color + '06',
+                  borderColor: r.color + '18',
                 } : {
                   backgroundColor: 'rgba(255,255,255,0.01)',
                   borderColor: '#ffffff06',
                 },
-                (!ok || cur) && { opacity: ok ? 0.5 : 0.3 },
+                !ok && { opacity: 0.3 },
               ]}
               activeOpacity={0.7}
             >
-              <Text style={styles.locEmoji}>{l.emoji}</Text>
-              <Text style={[styles.locName, ok ? (cur ? { color: l.color } : {}) : { color: colors.textDarkest }]}>{l.name}</Text>
-              {!ok && <Text style={styles.lockedLabel}>🔒 {l.rep} rep</Text>}
-              {ok && <Text style={styles.flyCostLabel}>✈️ {$(l.flyCost!)} • {l.travelDays}d</Text>}
-              {ok && l.priceMultipliers && (
+              <Text style={styles.locEmoji}>{r.emoji}</Text>
+              <Text style={[styles.locName, ok ? {} : { color: colors.textDarkest }]}>{r.name}</Text>
+              {!ok && <Text style={styles.lockedLabel}>🔒 {repNeeded} rep</Text>}
+              {ok && <Text style={styles.flyCostLabel}>✈️ {$(flyCost)} • {isNyc ? (currentRegion?.travelDays || 2) : r.travelDays}d</Text>}
+              {ok && !isNyc && Object.keys(r.priceMultipliers).length > 0 && (
                 <Text style={styles.discountLabel}>
-                  {Object.entries(l.priceMultipliers).map(([d, m]) =>
+                  {Object.entries(r.priceMultipliers).map(([d, m]) =>
                     `${DRUGS.find(x => x.id === d)?.emoji}${Math.round((1 - m) * 100)}%↓`
                   ).join(' ')}
                 </Text>

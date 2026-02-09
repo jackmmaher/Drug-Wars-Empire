@@ -1,23 +1,24 @@
 import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog } from '../types/game';
 import {
-  DRUGS, LOCATIONS, GANGS, EVENTS, MILESTONES,
+  DRUGS, LOCATIONS, GANGS, EVENTS, MILESTONES, REGIONS,
   RAT_NAMES, RAT_TYPES,
   DAYS, STARTING_CASH, STARTING_DEBT, STARTING_SPACE,
   DEBT_INTEREST, BANK_INTEREST,
-  R, C,
+  R, C, getRegionForLocation,
 } from '../constants/game';
 
 // ── Price Generation ───────────────────────────────────────
 export function generatePrices(locationId: string, event: MarketEvent | null): Record<string, number | null> {
-  const loc = LOCATIONS.find(x => x.id === locationId);
+  const region = getRegionForLocation(locationId);
+  const mults = region?.priceMultipliers || {};
   const prices: Record<string, number | null> = {};
   DRUGS.forEach(d => {
     if (C(0.12)) { prices[d.id] = null; return; }
     let pr = R(d.min, d.max);
-    if (loc?.priceMultipliers?.[d.id]) pr = Math.round(pr * loc.priceMultipliers[d.id]);
+    if (mults[d.id]) pr = Math.round(pr * mults[d.id]);
     if (event && event.drugId === d.id) {
       pr = Math.round(d.min * event.multiplier + Math.random() * d.min * 0.15);
-      if (loc?.priceMultipliers?.[d.id]) pr = Math.round(pr * loc.priceMultipliers[d.id]);
+      if (mults[d.id]) pr = Math.round(pr * mults[d.id]);
     }
     prices[d.id] = Math.max(1, pr);
   });
@@ -63,7 +64,7 @@ export function createPlayerState(locationId = 'bronx'): PlayerState {
     combo: 1,
     averageCosts: {},
     territories: {},
-    gangRelations: { col: 0, tri: 0, bra: 0, car: 0 },
+    gangRelations: Object.fromEntries(GANGS.map(g => [g.id, 0])),
     rat: makeRat(),
     currentEvent: ev,
     eventLog: ev ? [{ day: 1, message: ev.message, type: ev.type }] : [],
@@ -131,24 +132,53 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   effects.push({ type: 'sfx', sound: 'tick' });
 
   const dest = LOCATIONS.find(l => l.id === destinationId)!;
+  const srcLoc = LOCATIONS.find(l => l.id === player.location)!;
+  const srcRegion = REGIONS.find(r => r.id === srcLoc.region)!;
+  const destRegion = REGIONS.find(r => r.id === dest.region)!;
+  const isInterRegion = srcLoc.region !== dest.region;
   const p = { ...player };
 
-  // International checks
-  if (dest.region === 'intl') {
-    if (p.rep < (dest.rep || 0)) {
-      notifications.push({ message: `Need ${dest.rep} rep to unlock ${dest.name}.`, type: 'danger' });
+  // Inter-region flight checks
+  if (isInterRegion && dest.region !== 'nyc') {
+    if (p.rep < destRegion.rep) {
+      notifications.push({ message: `Need ${destRegion.rep} rep to unlock ${destRegion.name}.`, type: 'danger' });
       return { player, phase: 'playing', effects, notifications };
     }
-    if (p.cash < (dest.flyCost || 0)) {
-      notifications.push({ message: `Flight costs $${dest.flyCost}.`, type: 'danger' });
+    if (p.cash < destRegion.flyCost) {
+      notifications.push({ message: `Flight costs $${destRegion.flyCost.toLocaleString()}.`, type: 'danger' });
+      return { player, phase: 'playing', effects, notifications };
+    }
+  } else if (isInterRegion && dest.region === 'nyc' && srcRegion.id !== 'nyc') {
+    // Return to NYC costs half of the region you're leaving
+    const returnCost = Math.round(srcRegion.flyCost / 2);
+    if (p.cash < returnCost) {
+      notifications.push({ message: `Return flight costs $${returnCost.toLocaleString()}.`, type: 'danger' });
       return { player, phase: 'playing', effects, notifications };
     }
   }
 
-  const td = dest.travelDays || 1;
+  // Calculate travel days: inter-region uses flight days, intra-region = 1
+  const td = isInterRegion ? (dest.region === 'nyc' ? srcRegion.travelDays : destRegion.travelDays) : 1;
   p.day += td;
-  if (dest.region === 'intl') { p.cash -= dest.flyCost!; p.hasGoneInternational = true; }
-  p.location = destinationId;
+
+  // Deduct flight cost for inter-region travel
+  if (isInterRegion) {
+    if (dest.region === 'nyc') {
+      p.cash -= Math.round(srcRegion.flyCost / 2);
+    } else {
+      p.cash -= destRegion.flyCost;
+    }
+    p.hasGoneInternational = true;
+  }
+
+  // When flying to a region, land at its capital (first city)
+  if (isInterRegion) {
+    const regionLocs = LOCATIONS.filter(l => l.region === dest.region);
+    p.location = regionLocs[0].id;
+  } else {
+    p.location = destinationId;
+  }
+
   p.debt = Math.round(p.debt * Math.pow(1 + DEBT_INTEREST, td));
   p.bank = Math.round(p.bank * Math.pow(1 + BANK_INTEREST, td));
   p.heat = Math.max(0, p.heat - R(3, 10));
@@ -162,7 +192,7 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   const ev = C(0.38) ? EVENTS[R(0, EVENTS.length - 1)] : null;
   p.currentEvent = ev;
   p.previousPrices = { ...p.prices };
-  p.prices = generatePrices(destinationId, ev);
+  p.prices = generatePrices(p.location, ev);
   if (ev) p.eventLog = [...p.eventLog, { day: p.day, message: ev.message, type: ev.type }];
 
   // Near misses — only for drugs you NO LONGER hold (sold too early)
@@ -180,8 +210,8 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   p.recentSold = [];
 
   // Gang tax
-  const lg = GANGS.find(g => g.turf.includes(destinationId));
-  if (lg && !p.territories[destinationId] && p.gangRelations[lg.id] < -15 && C(0.3)) {
+  const lg = GANGS.find(g => g.turf.includes(p.location));
+  if (lg && !p.territories[p.location] && (p.gangRelations[lg.id] ?? 0) < -15 && C(0.3)) {
     const tax = Math.round(p.cash * R(5, 18) / 100);
     p.cash -= tax;
     p.eventLog = [...p.eventLog, { day: p.day, message: `${lg.emoji} ${lg.name} taxed you $${tax}!`, type: 'danger' }];
@@ -206,7 +236,7 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
 
   // Cops
   const curUsed = inventoryCount(p.inventory);
-  const cc = 0.12 + p.heat / 350 + (dest.region === 'intl' ? 0.1 : 0);
+  const cc = 0.12 + p.heat / 350 + (isInterRegion ? 0.1 : 0);
   if (C(cc) && curUsed > 0) {
     p.cops = { count: R(1, 2 + Math.floor(p.heat / 30)), bribeCost: R(400, 1500) };
     effects.push({ type: 'haptic', style: 'heavy' });
@@ -226,9 +256,9 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   if (!p.gun && C(0.14)) p.offer = { type: 'gun', price: R(300, 600) };
   else if (C(0.12)) { const sp = R(20, 35); p.offer = { type: 'coat', price: R(150, 400), space: sp }; }
   else if (!p.rat.hired && C(0.08) && p.rep >= 10) p.offer = { type: 'rat', rat: makeRat() };
-  else if (p.rep >= 25 && C(0.1) && !p.territories[destinationId]) {
-    const lg2 = GANGS.find(g => g.turf.includes(destinationId));
-    if (!lg2 || p.gangRelations[lg2.id] > 5) p.offer = { type: 'territory', locationId: destinationId, cost: R(3000, 12000), tribute: R(100, 500) };
+  else if (p.rep >= 25 && C(0.1) && !p.territories[p.location]) {
+    const lg2 = GANGS.find(g => g.turf.includes(p.location));
+    if (!lg2 || (p.gangRelations[lg2.id] ?? 0) > 5) p.offer = { type: 'territory', locationId: p.location, cost: R(3000, 12000), tribute: R(100, 500) };
   }
 
   // Milestones
@@ -306,7 +336,7 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
       p.combo = Math.min(5, 1 + p.streak * 0.15);
       p.rep += Math.ceil((pnl / 4000) * p.combo);
       const g = GANGS.find(x => x.turf.includes(p.location));
-      if (g) p.gangRelations = { ...p.gangRelations, [g.id]: p.gangRelations[g.id] + 1 };
+      if (g) p.gangRelations = { ...p.gangRelations, [g.id]: (p.gangRelations[g.id] ?? 0) + 1 };
       effects.push({ type: 'sfx', sound: pnl > 5000 ? 'big' : 'sell' }, { type: 'haptic', style: 'success' });
     } else {
       p.streak = 0;
@@ -451,6 +481,14 @@ export function payShark(player: PlayerState, amount: number | 'all'): PlayerSta
   p.debt -= v;
   const { milestones } = checkMilestones(p);
   p.milestones = milestones;
+  return p;
+}
+
+export function borrowShark(player: PlayerState, amount: number): PlayerState {
+  const p = { ...player };
+  const v = Math.max(0, amount);
+  p.cash += v;
+  p.debt += v;
   return p;
 }
 
