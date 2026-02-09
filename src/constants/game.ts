@@ -111,7 +111,7 @@ export const REGIONS: Region[] = [
   },
   {
     id: 'colombia', name: 'Colombia', emoji: '🇨🇴', color: '#dc2626',
-    rep: 20, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.55, heroin: 0.8, bluesky: 0.6, opioids: 0.5 }, gangId: 'car',
+    rep: 45, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.55, heroin: 0.8, bluesky: 0.6, opioids: 0.5 }, gangId: 'car',
     law: COLOMBIA_LAW, customsStrictness: 0.30, contraband: ['heroin', 'opioids'],
   },
   {
@@ -134,52 +134,52 @@ export const REGIONS: Region[] = [
 // ── LOCATIONS ──────────────────────────────────────────────
 // NYC (kept as named export for backward compat)
 export const NYC: Location[] = [
-  { id: 'bronx', name: 'The Bronx', emoji: '🏚️', color: '#ef4444', bank: true, shark: true, region: 'nyc' },
-  { id: 'ghetto', name: 'The Ghetto', emoji: '🔥', color: '#a855f7', region: 'nyc' },
-  { id: 'central_park', name: 'Central Park', emoji: '🌳', color: '#22c55e', region: 'nyc' },
-  { id: 'manhattan', name: 'Manhattan', emoji: '🏙️', color: '#3b82f6', region: 'nyc' },
-  { id: 'coney', name: 'Coney Island', emoji: '🎡', color: '#f59e0b', region: 'nyc' },
-  { id: 'brooklyn', name: 'Brooklyn', emoji: '🌉', color: '#ec4899', region: 'nyc' },
+  { id: 'bronx', name: 'The Bronx', emoji: '🏚️', color: '#ef4444', bank: true, shark: true, region: 'nyc', modifier: { type: 'repGain', value: 0.05, label: 'Street Cred — +5% rep from trades' } },
+  { id: 'ghetto', name: 'The Ghetto', emoji: '🔥', color: '#a855f7', region: 'nyc', modifier: { type: 'buyDiscount', value: 0.10, label: 'Black Market — 10% off buys' } },
+  { id: 'central_park', name: 'Central Park', emoji: '🌳', color: '#22c55e', region: 'nyc', modifier: { type: 'sellBonus', value: 0.15, drugs: ['acid', 'ecstasy'], label: 'Tourist Trap — +15% on party drugs' } },
+  { id: 'manhattan', name: 'Manhattan', emoji: '🏙️', color: '#3b82f6', region: 'nyc', modifier: { type: 'sellBonus', value: 0.10, drugs: ['cocaine', 'heroin', 'bluesky', 'opioids', 'ozempic'], label: 'High Rollers — +10% on premium drugs' } },
+  { id: 'coney', name: 'Coney Island', emoji: '🎡', color: '#f59e0b', region: 'nyc', modifier: { type: 'heatReduction', value: 5, label: 'Off the Radar — -5 heat on arrival' } },
+  { id: 'brooklyn', name: 'Brooklyn', emoji: '🌉', color: '#ec4899', region: 'nyc', modifier: { type: 'raidDefense', value: 0.10, label: 'Fortified — +10% territory defense' } },
 ];
 
 // Colombia
 const COLOMBIA: Location[] = [
-  { id: 'bogota', name: 'Bogot\u00e1', emoji: '🏛️', color: '#dc2626', bank: true, shark: true, region: 'colombia' },
-  { id: 'medellin', name: 'Medell\u00edn', emoji: '💀', color: '#991b1b', region: 'colombia' },
-  { id: 'cali', name: 'Cali', emoji: '🌴', color: '#b91c1c', region: 'colombia' },
-  { id: 'cartagena', name: 'Cartagena', emoji: '⚓', color: '#ef4444', region: 'colombia' },
-  { id: 'barranquilla', name: 'Barranquilla', emoji: '🏖️', color: '#f87171', region: 'colombia' },
-  { id: 'bucaramanga', name: 'Bucaramanga', emoji: '⛰️', color: '#fca5a5', region: 'colombia' },
+  { id: 'bogota', name: 'Bogot\u00e1', emoji: '🏛️', color: '#dc2626', bank: true, shark: true, region: 'colombia', modifier: { type: 'buyDiscount', value: 0.08, label: 'Cartel Connections — 8% off buys' } },
+  { id: 'medellin', name: 'Medell\u00edn', emoji: '💀', color: '#991b1b', region: 'colombia', modifier: { type: 'copReduction', value: 0.05, label: 'Cartel Controlled — -5% cop encounters' } },
+  { id: 'cali', name: 'Cali', emoji: '🌴', color: '#b91c1c', region: 'colombia', modifier: { type: 'sellBonus', value: 0.10, drugs: ['cocaine'], label: 'Cali Cartel — +10% cocaine sells' } },
+  { id: 'cartagena', name: 'Cartagena', emoji: '⚓', color: '#ef4444', region: 'colombia', modifier: { type: 'heatDecay', value: 3, label: 'Port City — +3 heat decay' } },
+  { id: 'barranquilla', name: 'Barranquilla', emoji: '🏖️', color: '#f87171', region: 'colombia', modifier: { type: 'heatReduction', value: 4, label: 'Low Profile — -4 heat on arrival' } },
+  { id: 'bucaramanga', name: 'Bucaramanga', emoji: '⛰️', color: '#fca5a5', region: 'colombia', modifier: { type: 'repGain', value: 0.08, label: 'Mountain Respect — +8% rep from trades' } },
 ];
 
 // Netherlands
 const NETHERLANDS: Location[] = [
-  { id: 'amsterdam', name: 'Amsterdam', emoji: '🌷', color: '#f97316', bank: true, shark: true, region: 'netherlands' },
-  { id: 'rotterdam', name: 'Rotterdam', emoji: '🚢', color: '#ea580c', region: 'netherlands' },
-  { id: 'the_hague', name: 'The Hague', emoji: '⚖️', color: '#c2410c', region: 'netherlands' },
-  { id: 'utrecht', name: 'Utrecht', emoji: '🏰', color: '#fb923c', region: 'netherlands' },
-  { id: 'eindhoven', name: 'Eindhoven', emoji: '💡', color: '#fdba74', region: 'netherlands' },
-  { id: 'groningen', name: 'Groningen', emoji: '🌾', color: '#fed7aa', region: 'netherlands' },
+  { id: 'amsterdam', name: 'Amsterdam', emoji: '🌷', color: '#f97316', bank: true, shark: true, region: 'netherlands', modifier: { type: 'sellBonus', value: 0.12, drugs: ['ecstasy', 'weed'], label: 'Coffee Shop Culture — +12% on party drugs' } },
+  { id: 'rotterdam', name: 'Rotterdam', emoji: '🚢', color: '#ea580c', region: 'netherlands', modifier: { type: 'sellBonus', value: 0.10, label: 'Shipping Hub — +10% on all sells' } },
+  { id: 'the_hague', name: 'The Hague', emoji: '⚖️', color: '#c2410c', region: 'netherlands', modifier: { type: 'copReduction', value: 0.06, label: 'Diplomatic Zone — -6% cop encounters' } },
+  { id: 'utrecht', name: 'Utrecht', emoji: '🏰', color: '#fb923c', region: 'netherlands', modifier: { type: 'buyDiscount', value: 0.07, label: 'University Town — 7% off buys' } },
+  { id: 'eindhoven', name: 'Eindhoven', emoji: '💡', color: '#fdba74', region: 'netherlands', modifier: { type: 'repGain', value: 0.06, label: 'Tech Hub — +6% rep from trades' } },
+  { id: 'groningen', name: 'Groningen', emoji: '🌾', color: '#fed7aa', region: 'netherlands', modifier: { type: 'heatDecay', value: 4, label: 'Countryside — +4 heat decay' } },
 ];
 
 // Thailand
 const THAILAND: Location[] = [
-  { id: 'bangkok', name: 'Bangkok', emoji: '🛕', color: '#14b8a6', bank: true, shark: true, region: 'thailand' },
-  { id: 'chiang_mai', name: 'Chiang Mai', emoji: '🏔️', color: '#0d9488', region: 'thailand' },
-  { id: 'phuket', name: 'Phuket', emoji: '🏝️', color: '#0f766e', region: 'thailand' },
-  { id: 'pattaya', name: 'Pattaya', emoji: '🌃', color: '#2dd4bf', region: 'thailand' },
-  { id: 'chiang_rai', name: 'Chiang Rai', emoji: '🔺', color: '#5eead4', region: 'thailand' },
-  { id: 'hat_yai', name: 'Hat Yai', emoji: '🌧️', color: '#99f6e4', region: 'thailand' },
+  { id: 'bangkok', name: 'Bangkok', emoji: '🛕', color: '#14b8a6', bank: true, shark: true, region: 'thailand', modifier: { type: 'buyDiscount', value: 0.12, drugs: ['speed', 'heroin'], label: 'Supply Hub — 12% off speed & heroin' } },
+  { id: 'chiang_mai', name: 'Chiang Mai', emoji: '🏔️', color: '#0d9488', region: 'thailand', modifier: { type: 'heatDecay', value: 5, label: 'Mountain Hideout — +5 heat decay' } },
+  { id: 'phuket', name: 'Phuket', emoji: '🏝️', color: '#0f766e', region: 'thailand', modifier: { type: 'sellBonus', value: 0.12, drugs: ['ecstasy', 'acid', 'weed'], label: 'Tourist Paradise — +12% on party drugs' } },
+  { id: 'pattaya', name: 'Pattaya', emoji: '🌃', color: '#2dd4bf', region: 'thailand', modifier: { type: 'heatReduction', value: 4, label: 'Neon Anonymity — -4 heat on arrival' } },
+  { id: 'chiang_rai', name: 'Chiang Rai', emoji: '🔺', color: '#5eead4', region: 'thailand', modifier: { type: 'buyDiscount', value: 0.10, drugs: ['heroin', 'opioids'], label: 'Golden Triangle — 10% off opiates' } },
+  { id: 'hat_yai', name: 'Hat Yai', emoji: '🌧️', color: '#99f6e4', region: 'thailand', modifier: { type: 'raidDefense', value: 0.12, label: 'Border Fortress — +12% territory defense' } },
 ];
 
 // France
 const FRANCE: Location[] = [
-  { id: 'marseille', name: 'Marseille', emoji: '🚢', color: '#6366f1', bank: true, shark: true, region: 'france' },
-  { id: 'paris', name: 'Paris', emoji: '🗼', color: '#4f46e5', region: 'france' },
-  { id: 'lyon', name: 'Lyon', emoji: '🍷', color: '#4338ca', region: 'france' },
-  { id: 'nice', name: 'Nice', emoji: '🌊', color: '#818cf8', region: 'france' },
-  { id: 'toulouse', name: 'Toulouse', emoji: '🌹', color: '#a5b4fc', region: 'france' },
-  { id: 'bordeaux', name: 'Bordeaux', emoji: '🍇', color: '#c7d2fe', region: 'france' },
+  { id: 'marseille', name: 'Marseille', emoji: '🚢', color: '#6366f1', bank: true, shark: true, region: 'france', modifier: { type: 'heatDecay', value: 3, label: 'Port City — +3 heat decay' } },
+  { id: 'paris', name: 'Paris', emoji: '🗼', color: '#4f46e5', region: 'france', modifier: { type: 'sellBonus', value: 0.12, drugs: ['cocaine', 'ozempic'], label: 'High Society — +12% on luxury drugs' } },
+  { id: 'lyon', name: 'Lyon', emoji: '🍷', color: '#4338ca', region: 'france', modifier: { type: 'repGain', value: 0.07, label: 'Underground Scene — +7% rep from trades' } },
+  { id: 'nice', name: 'Nice', emoji: '🌊', color: '#818cf8', region: 'france', modifier: { type: 'copReduction', value: 0.05, label: 'Riviera Blind Eye — -5% cop encounters' } },
+  { id: 'toulouse', name: 'Toulouse', emoji: '🌹', color: '#a5b4fc', region: 'france', modifier: { type: 'buyDiscount', value: 0.08, label: 'Southern Pipeline — 8% off buys' } },
+  { id: 'bordeaux', name: 'Bordeaux', emoji: '🍇', color: '#c7d2fe', region: 'france', modifier: { type: 'heatReduction', value: 5, label: 'Wine Country — -5 heat on arrival' } },
 ];
 
 export const LOCATIONS: Location[] = [...NYC, ...COLOMBIA, ...NETHERLANDS, ...THAILAND, ...FRANCE];
@@ -515,7 +515,7 @@ export const LEVEL_CONFIGS: Record<CampaignLevel, LevelConfig> = {
     consignmentCapMultiplier: 1, gangLoanCapMultiplier: 1, territoryTributeMultiplier: 1,
     internationalRegions: ['colombia', 'thailand'],
     gangConsignment: true, gangLoans: true, gangMissions: true, territoryPurchase: true, gangWars: false,
-    winCondition: { minNetWorth: 250000, debtFree: false, bloodBrother: true, minTerritories: 2 },
+    winCondition: { minNetWorth: 125000, debtFree: false, bloodBrother: true, minTerritories: 2 },
   },
   3: {
     level: 3, name: 'Gang Takeover', subtitle: 'Dominate the empire. Crush the competition.', emoji: '👑',

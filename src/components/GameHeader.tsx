@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { $, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, PERSONAS, getRank, getRegionForLocation, getRegion, DAYS_PER_LEVEL, DEBT_INTEREST, BANK_INTEREST, LEVEL_CONFIGS, FAVOR_BLOOD } from '../constants/game';
 import { inventoryCount, netWorth, effectiveSpace } from '../lib/game-logic';
@@ -9,9 +9,48 @@ import { MiniStat } from './MiniStat';
 import { StatusIcon } from './StatusIcon';
 import type { CampaignLevel } from '../types/game';
 
+function getConsignmentColor(turnsLeft: number): string {
+  if (turnsLeft >= 5) return '#22c55e';
+  if (turnsLeft === 4) return '#84cc16';
+  if (turnsLeft === 3) return '#eab308';
+  if (turnsLeft === 2) return '#f97316';
+  if (turnsLeft === 1) return '#ef4444';
+  return '#dc2626';
+}
+
 export function GameHeader() {
   const { colors, mode, toggleTheme } = useTheme();
   const cp = useGameStore(s => s.player);
+
+  // Streak badge state
+  const [showBroke, setShowBroke] = useState(false);
+  const prevStreakRef = useRef(cp.streak);
+
+  useEffect(() => {
+    if (prevStreakRef.current > 1 && cp.streak === 1) {
+      setShowBroke(true);
+      const timer = setTimeout(() => setShowBroke(false), 1500);
+      return () => clearTimeout(timer);
+    }
+    prevStreakRef.current = cp.streak;
+  }, [cp.streak]);
+
+  // Consignment fuse pulse animation
+  const fuseOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (cp.consignment && cp.consignment.turnsLeft <= 1) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(fuseOpacity, { toValue: 0.6, duration: 500, useNativeDriver: true }),
+          Animated.timing(fuseOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      fuseOpacity.setValue(1);
+    }
+  }, [cp.consignment?.turnsLeft]);
   const gameMode = useGameStore(s => s.gameMode);
   const campaign = useGameStore(s => s.campaign);
   const subPanel = useGameStore(s => s.subPanel);
@@ -44,11 +83,40 @@ export function GameHeader() {
               {gameMode === 'campaign' && <Text style={{ color: colors.yellow, fontWeight: '800' }}>L{campaign.level} </Text>}
               DAY {Math.min(cp.day, daysLimit)}/{daysLimit}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={{ fontSize: 24, fontWeight: '900', color: colors.white }}>{$(cp.cash)}</Text>
-              {cp.streak > 1 && (
-                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.yellow }}>({cp.streak}x)</Text>
-              )}
+              {showBroke ? (
+                <Text style={{ fontSize: 12, fontWeight: '900', color: '#ef4444' }}>BROKE</Text>
+              ) : cp.streak >= 5 ? (
+                <View style={{
+                  backgroundColor: 'rgba(251,191,36,0.2)', borderColor: '#fbbf24',
+                  borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2,
+                  shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 8,
+                }}>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#fbbf24' }}>{cp.streak}x</Text>
+                </View>
+              ) : cp.streak === 4 ? (
+                <View style={{
+                  backgroundColor: 'rgba(249,115,22,0.15)', borderColor: '#f97316',
+                  borderWidth: 1, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2,
+                }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#f97316' }}>4x</Text>
+                </View>
+              ) : cp.streak === 3 ? (
+                <View style={{
+                  backgroundColor: 'rgba(245,158,11,0.12)', borderColor: '#f59e0b',
+                  borderWidth: 1, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 1,
+                }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#f59e0b' }}>3x</Text>
+                </View>
+              ) : cp.streak === 2 ? (
+                <View style={{
+                  backgroundColor: 'rgba(34,197,94,0.1)', borderColor: '#22c55e',
+                  borderWidth: 1, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 1,
+                }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#22c55e' }}>2x</Text>
+                </View>
+              ) : null}
             </View>
             <Text style={{ fontSize: 11, color: colors.textDark }}>Cash on hand</Text>
           </View>
@@ -158,23 +226,46 @@ export function GameHeader() {
         </View>
       </View>
 
-      {/* Consignment status bar */}
-      {cp.consignment && conGang && (
-        <View style={[
-          {
-            marginHorizontal: 12, marginBottom: 3, paddingVertical: 5, paddingHorizontal: 10,
-            borderRadius: 6, backgroundColor: 'rgba(234,179,8,0.06)', borderWidth: 1, borderColor: 'rgba(234,179,8,0.15)',
-          },
-          cp.consignment.turnsLeft <= 1 && { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' },
-        ]}>
-          <Text style={{
-            fontSize: 13, fontWeight: '600',
-            color: cp.consignment.turnsLeft <= 1 ? colors.red : colors.yellow,
-          }}>
-            Owe {conGang.name} {$(cp.consignment.amountOwed - cp.consignment.amountPaid)} {'\u2022'} {cp.consignment.turnsLeft > 0 ? `${cp.consignment.turnsLeft} turn${cp.consignment.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'} {'\u2022'} Return to {conLoc?.name || '???'}
-          </Text>
-        </View>
-      )}
+      {/* Consignment status bar with fuse */}
+      {cp.consignment && conGang && (() => {
+        const turnsLeft = cp.consignment!.turnsLeft;
+        const totalTurns = 5;
+        const fillPct = Math.max(0, Math.min(turnsLeft / totalTurns, 1)) * 100;
+        const fuseColor = getConsignmentColor(turnsLeft);
+        const isOverdue = turnsLeft <= 0;
+        const isCritical = turnsLeft <= 1;
+
+        return (
+          <View style={[
+            {
+              marginHorizontal: 12, marginBottom: 3, paddingVertical: 6, paddingHorizontal: 10,
+              borderRadius: 6, borderWidth: 1,
+            },
+            isOverdue
+              ? { backgroundColor: 'rgba(220,38,38,0.12)', borderColor: 'rgba(220,38,38,0.3)' }
+              : isCritical
+              ? { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' }
+              : { backgroundColor: 'rgba(234,179,8,0.06)', borderColor: 'rgba(234,179,8,0.15)' },
+          ]}>
+            {/* Fuse bar */}
+            <Animated.View style={{ opacity: isCritical ? fuseOpacity : 1, marginBottom: 4 }}>
+              <View style={{
+                height: 8, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden',
+              }}>
+                <View style={{
+                  height: '100%', width: `${fillPct}%`, backgroundColor: fuseColor, borderRadius: 4,
+                }} />
+              </View>
+            </Animated.View>
+            <Text style={{
+              fontSize: 13, fontWeight: '600',
+              color: isOverdue ? '#dc2626' : isCritical ? colors.red : colors.yellow,
+            }}>
+              {isOverdue ? '\uD83D\uDC80 ' : ''}Owe {conGang.name} {$(cp.consignment!.amountOwed - cp.consignment!.amountPaid)} {'\u2022'} {turnsLeft > 0 ? `${turnsLeft} turn${turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'} {'\u2022'} Return to {conLoc?.name || '???'}
+            </Text>
+          </View>
+        );
+      })()}
 
       {/* Gang Loan status bar */}
       {cp.gangLoan && loanGang && (

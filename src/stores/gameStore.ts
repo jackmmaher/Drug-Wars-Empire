@@ -42,6 +42,10 @@ interface GameStore {
   hasSeenRules: boolean;
   helpSeen: Record<string, boolean>;
 
+  // Progressive onboarding
+  tooltipsSeen: Record<string, boolean>;
+  activeTooltip: string | null;
+
   // Computed helpers
   usedSpace: () => number;
   freeSpace: () => number;
@@ -79,6 +83,8 @@ interface GameStore {
   setPlayerName: (name: string) => void;
   dismissRules: () => void;
   markHelpSeen: (key: string) => void;
+  showTooltip: (key: string) => void;
+  dismissTooltip: () => void;
   resetToTitle: () => void;
   notify: (message: string, type?: string) => void;
   clearNotifications: () => void;
@@ -105,6 +111,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   notifications: [],
   hasSeenRules: false,
   helpSeen: {},
+  tooltipsSeen: {},
+  activeTooltip: null,
 
   // Computed
   usedSpace: () => inventoryCount(get().player.inventory),
@@ -384,6 +392,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   markHelpSeen: (key) => set(s => ({ helpSeen: { ...s.helpSeen, [key]: true } })),
 
+  showTooltip: (key) => {
+    const s = get();
+    if (!s.tooltipsSeen[key] && s.activeTooltip === null) {
+      set({ activeTooltip: key });
+    }
+  },
+
+  dismissTooltip: () => {
+    const s = get();
+    if (s.activeTooltip) {
+      set({
+        tooltipsSeen: { ...s.tooltipsSeen, [s.activeTooltip]: true },
+        activeTooltip: null,
+      });
+    }
+  },
+
   resetToTitle: () => {
     set(s => ({
       phase: 'title',
@@ -397,6 +422,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       notifications: [],
       hasSeenRules: s.hasSeenRules,
       helpSeen: s.helpSeen,
+      tooltipsSeen: s.tooltipsSeen,
+      activeTooltip: null,
       playerName: s.playerName,
       selectedPersona: null,
     }));

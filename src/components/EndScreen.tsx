@@ -121,6 +121,45 @@ export function EndScreen() {
           ))}
         </View>
 
+        {/* Lesson Learned */}
+        <View style={{
+          width: '100%', maxWidth: 420, marginBottom: 14,
+          backgroundColor: 'rgba(255,255,255,0.04)',
+          borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#f59e0b',
+          padding: 16,
+        }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#f59e0b', letterSpacing: 1, marginBottom: 8 }}>
+            {'\uD83D\uDCA1'} LESSON LEARNED
+          </Text>
+          <Text style={{ fontSize: 14, color: '#94a3b8', fontStyle: 'italic', lineHeight: 20 }}>
+            "{(() => {
+              if (cp.bank > 20000) {
+                return 'Cash in the bank earns almost nothing. Every dollar sitting idle is a missed trade opportunity.';
+              }
+              if (!cp.hasGoneInternational) {
+                return 'International regions have much cheaper drugs. One flight to Colombia pays for itself in a single trade.';
+              }
+              if (cp.debt > 15000) {
+                return 'Shark debt grows 4% every day. Paying it off early saves thousands in compounding interest.';
+              }
+              const relations = Object.values(cp.gangRelations || {});
+              if (relations.length > 0 && relations.every(r => r < 5)) {
+                return 'Building gang relations unlocks sell bonuses, cheaper territory, and police protection. Trade on their turf and do missions.';
+              }
+              if ((cp.fingers ?? 10) < 10) {
+                return 'Only take consignment deals if you can flip the drugs fast. Missing the deadline costs fingers — and eventually your career.';
+              }
+              if ((cp.maxStreak || 0) < 3) {
+                return 'Consecutive profitable trades build a combo multiplier for rep. Buy low, sell high, and keep the streak alive.';
+              }
+              if ((cp.customsCaught || 0) > 2) {
+                return 'Customs checks scale with your cargo size and heat level. Travel light through strict regions, or find safer routes.';
+              }
+              return 'The best dealers read the market. Watch price trends, follow your informant\'s tips, and position before the spike hits.';
+            })()}"
+          </Text>
+        </View>
+
         {leaderboard.length > 0 && (
           <View style={{ marginTop: 14, width: '100%', maxWidth: 420 }}>
             <Text style={{ fontSize: 15, fontWeight: '800', color: colors.yellow, letterSpacing: 2, marginBottom: 6, textAlign: 'center' }}>

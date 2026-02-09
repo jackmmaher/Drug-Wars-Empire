@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { $, DRUGS } from '../constants/game';
@@ -13,6 +13,13 @@ export function TradeModal() {
   const confirmTrade = useGameStore(s => s.confirmTrade);
   const closeTrade = useGameStore(s => s.closeTrade);
   const cp = useGameStore(s => s.player);
+
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // Reset confirmation state when modal opens/closes
+  useEffect(() => {
+    setShowConfirm(false);
+  }, [activeTrade?.drugId, activeTrade?.type]);
 
   if (!activeTrade) return null;
 
@@ -140,12 +147,66 @@ export function TradeModal() {
               { backgroundColor: colors.red, borderRadius: 8, paddingVertical: 12, paddingHorizontal: 32 },
               q <= 0 && { opacity: 0.3 },
             ]}
-            onPress={confirmTrade}
+            onPress={() => {
+              if (q <= 0) return;
+              if (total > 5000 && !showConfirm) {
+                setShowConfirm(true);
+              } else {
+                confirmTrade();
+                setShowConfirm(false);
+              }
+            }}
             disabled={q <= 0}
           >
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{isBuy ? 'BUY' : 'SELL'} {q > 0 ? q : ''}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Trade confirmation overlay for > $5K */}
+        {showConfirm && (
+          <View style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center',
+          }}>
+            <View style={{
+              backgroundColor: colors.bgCard, borderRadius: 10, padding: 20,
+              borderWidth: 1, borderColor: colors.cardBorder, maxWidth: 320, width: '85%',
+              alignItems: 'center',
+            }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: colors.white, textAlign: 'center', marginBottom: 8 }}>
+                Confirm: {isBuy ? 'Buy' : 'Sell'} {q} {drug.name} for {$(total)}?
+              </Text>
+              {!isBuy && pnl < 0 && (
+                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.red, marginBottom: 8 }}>
+                  Selling at a loss!
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                <TouchableOpacity
+                  onPress={() => setShowConfirm(false)}
+                  style={{
+                    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder,
+                    borderRadius: 8, paddingVertical: 10, paddingHorizontal: 20,
+                  }}
+                >
+                  <Text style={{ color: colors.textDim, fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    confirmTrade();
+                    setShowConfirm(false);
+                  }}
+                  style={{
+                    backgroundColor: isBuy ? '#16a34a' : '#d97706',
+                    borderRadius: 8, paddingVertical: 10, paddingHorizontal: 20,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     </View>
   );

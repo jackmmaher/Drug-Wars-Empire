@@ -5,6 +5,18 @@ import { $, DRUGS, GANGS, LOCATIONS, STASH_CAPACITY, BANK_INTEREST, DEBT_INTERES
 import { inventoryCount, getGangLoanCap, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
+function textSparkline(values: number[]): string {
+  if (values.length < 2) return '';
+  const blocks = ['\u2581', '\u2582', '\u2583', '\u2584', '\u2585', '\u2586', '\u2587', '\u2588'];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return values.map(v => {
+    const idx = Math.round(((v - min) / range) * (blocks.length - 1));
+    return blocks[idx];
+  }).join('');
+}
+
 export function MarketTab() {
   const { colors } = useTheme();
   const cp = useGameStore(s => s.player);
@@ -209,6 +221,32 @@ export function MarketTab() {
         </View>
       )}
 
+      {/* Near-miss banner */}
+      {(cp.nearMisses || []).length > 0 && (() => {
+        const miss = cp.nearMisses[0];
+        const missedAmt = miss.missedProfit;
+        return (
+          <View style={{
+            marginBottom: 6, padding: 10, borderRadius: 6,
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            borderLeftWidth: 3, borderLeftColor: '#ef4444',
+          }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#ef4444', letterSpacing: 1, marginBottom: 4 }}>
+              MISSED OPPORTUNITY
+            </Text>
+            <Text style={{ fontSize: 14, color: colors.textDim }}>
+              You sold {miss.drug.emoji} {miss.drug.name} for {$(miss.previousPrice)}
+            </Text>
+            <Text style={{ fontSize: 14, color: colors.textDim }}>
+              It spiked to {$(miss.currentPrice)}
+            </Text>
+            <Text style={{ fontSize: 22, fontWeight: '900', color: '#ef4444', marginTop: 4 }}>
+              {$(missedAmt)} LEFT ON THE TABLE
+            </Text>
+          </View>
+        );
+      })()}
+
       {/* Drug list */}
       {DRUGS.map(d => {
         const pr = cp.prices[d.id] as number | null;
@@ -223,6 +261,12 @@ export function MarketTab() {
 
         const isRare = !!d.rare;
         const isRareAvailable = isRare && !!pr;
+
+        const history = cp.priceHistory?.[d.id] || [];
+        const sparkline = textSparkline(history);
+        const sparkColor = history.length >= 2
+          ? (history[history.length - 1] > history[0] ? '#22c55e' : history[history.length - 1] < history[0] ? '#ef4444' : '#6b7280')
+          : '#6b7280';
 
         return (
           <View key={d.id} style={[
@@ -247,11 +291,18 @@ export function MarketTab() {
                     </View>
                   )}
                 </View>
-                {pc !== null && pc !== 0 && (
-                  <Text style={{ fontSize: 12, color: pc > 0 ? colors.green : colors.red }}>
-                    {pc > 0 ? '\u25B2' : '\u25BC'}{Math.abs(pc).toFixed(0)}%
-                  </Text>
-                )}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  {pc !== null && pc !== 0 && (
+                    <Text style={{ fontSize: 12, color: pc > 0 ? colors.green : colors.red }}>
+                      {pc > 0 ? '\u25B2' : '\u25BC'}{Math.abs(pc).toFixed(0)}%
+                    </Text>
+                  )}
+                  {sparkline.length > 0 && (
+                    <Text style={{ fontSize: 10, color: sparkColor, fontFamily: 'monospace', letterSpacing: 1 }}>
+                      {sparkline}
+                    </Text>
+                  )}
+                </View>
               </View>
               <Text style={[
                 { width: 80, textAlign: 'right', fontSize: 17, fontWeight: '900', color: colors.white },

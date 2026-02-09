@@ -82,6 +82,13 @@ export interface Region {
   contraband: string[];
 }
 
+export interface LocationModifier {
+  type: 'repGain' | 'buyDiscount' | 'sellBonus' | 'heatReduction' | 'raidDefense' | 'heatDecay' | 'copReduction';
+  value: number;
+  drugs?: string[];
+  label: string;
+}
+
 export interface Location {
   id: string;
   name: string;
@@ -90,6 +97,7 @@ export interface Location {
   region: string;
   bank?: boolean;
   shark?: boolean;
+  modifier?: LocationModifier;
 }
 
 export interface Gang {
@@ -320,6 +328,9 @@ export interface PlayerState {
   gangMission: GangMission | null;
   gangMissionsCompleted: number;
   campaignLevel: CampaignLevel;
+  recentTrades: Array<{day: number, drug: string, qty: number, type: 'buy' | 'sell', region: string}>;
+  priceHistory: Record<string, number[]>;
+  tradeLog: Array<{day: number, action: string, drug: string, qty: number, price: number, location: string, profit?: number}>;
 }
 
 export type GamePhase = 'title' | 'playing' | 'cop' | 'win' | 'end' | 'levelComplete' | 'levelIntro';

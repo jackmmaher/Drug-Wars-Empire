@@ -354,6 +354,71 @@ export function IntelTab() {
         )}
       </Section>
 
+      {/* Dealer's Journal (Trade Log) */}
+      <Section title={'\uD83D\uDCD2 DEALER\'S JOURNAL'} count={(cp.tradeLog || []).length} defaultOpen={false}>
+        {(cp.tradeLog || []).length > 0 ? (
+          <View>
+            {[...(cp.tradeLog || [])].reverse().slice(0, 15).map((entry, i) => {
+              const loc = LOCATIONS.find(l => l.id === entry.location);
+              const drug = DRUGS.find(d => d.id === entry.drug);
+              const locName = loc?.name || entry.location;
+              const drugName = drug?.name || entry.drug;
+              const perUnit = entry.qty > 0 ? entry.price / entry.qty : entry.price;
+              const perUnitStr = perUnit >= 1000 ? `$${(perUnit / 1000).toFixed(1)}K` : `$${Math.round(perUnit)}`;
+
+              const isBuy = entry.action === 'buy';
+              const isSell = entry.action === 'sell';
+              const isCustoms = entry.action === 'customs';
+
+              const arrow = isCustoms ? '\uD83D\uDEC3' : isBuy ? '\u25B2' : '\u25BC';
+              const arrowColor = isCustoms ? colors.red : isBuy ? colors.green : '#f59e0b';
+
+              const amountColor = isCustoms ? colors.red
+                : isSell ? ((entry.profit ?? 0) >= 0 ? colors.green : '#f59e0b')
+                : colors.red;
+
+              const displayAmount = isSell ? `+${$(entry.price)}` : `-${$(Math.abs(entry.price))}`;
+
+              const profitPct = isSell && entry.profit !== undefined && entry.price > 0
+                ? Math.round((entry.profit / (entry.price - entry.profit)) * 100)
+                : null;
+
+              return (
+                <View key={i} style={{
+                  flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 6,
+                  marginBottom: 2, backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 4,
+                }}>
+                  <Text style={{ fontSize: 12, color: colors.textDarkest, fontVariant: ['tabular-nums'], width: 28 }}>D{entry.day}</Text>
+                  <Text style={{ fontSize: 13, color: arrowColor, width: 22 }}>{arrow}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, color: colors.text }} numberOfLines={1}>
+                      {isCustoms ? 'Customs seized ' : isBuy ? 'Bought ' : 'Sold '}
+                      <Text style={{ fontWeight: '700' }}>{entry.qty} {drugName}</Text>
+                      {!isCustoms && <Text style={{ color: colors.textMuted }}> @ {perUnitStr} ea</Text>}
+                      <Text style={{ color: colors.textDim }}> in {locName}</Text>
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end', marginLeft: 6 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: amountColor, fontVariant: ['tabular-nums'] }}>
+                      {displayAmount}
+                    </Text>
+                    {profitPct !== null && (
+                      <Text style={{ fontSize: 10, color: profitPct >= 0 ? colors.green : colors.red }}>
+                        ({profitPct >= 0 ? '+' : ''}{profitPct}%)
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={{ fontSize: 14, color: colors.textDark, fontStyle: 'italic', padding: 10 }}>
+            No trades yet. Buy low, sell high.
+          </Text>
+        )}
+      </Section>
+
       {/* Gangs -- grouped by region, filtered by campaign level */}
       <Section title="GANGS" count={GANGS.filter(g => {
         const region = getRegionForLocation(g.turf[0]);

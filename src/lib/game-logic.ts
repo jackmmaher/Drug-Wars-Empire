@@ -138,6 +138,9 @@ export function createPlayerState(locationId = 'bronx', difficulty: 'conservativ
     gangMission: null,
     gangMissionsCompleted: 0,
     campaignLevel,
+    recentTrades: [],
+    priceHistory: {},
+    tradeLog: [],
   };
 }
 
@@ -305,7 +308,7 @@ export function netWorth(p: PlayerState): number {
 
 // ── Side Effects Queue ─────────────────────────────────────
 export type SideEffect =
-  | { type: 'sfx'; sound: 'buy' | 'sell' | 'big' | 'bad' | 'miss' | 'level' | 'tick' }
+  | { type: 'sfx'; sound: 'buy' | 'sell' | 'big' | 'bad' | 'miss' | 'level' | 'tick' | 'cop' | 'finger' | 'bounty' | 'streak' }
   | { type: 'shake' }
   | { type: 'haptic'; style: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error' };
 
@@ -396,7 +399,9 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
 
   // ── Heat Decay (reduced) + Wealth-scaled heat floor ──
   const mods = getPersonaModifiers(p.personaId);
-  let heatDecay = R(3, 7) + law.heatDecayBonus + mods.heatDecayBonus;
+  // Location modifier: heatDecay bonus when traveling FROM this location
+  const srcLocModifier = srcLoc.modifier?.type === 'heatDecay' ? srcLoc.modifier.value : 0;
+  let heatDecay = R(3, 7) + law.heatDecayBonus + mods.heatDecayBonus + srcLocModifier;
   // No high-heat bonus — rich players shouldn't shed heat faster
   p.heat = Math.max(0, p.heat - heatDecay);
 
@@ -405,6 +410,12 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   const heatFloor = Math.min(30, Math.floor(nw / 100_000) * 3);
   if (p.heat < heatFloor) p.heat = heatFloor;
 
+  // ── Location modifier: heatReduction on arrival ──
+  const destLocObj = LOCATIONS.find(l => l.id === p.location);
+  if (destLocObj?.modifier?.type === 'heatReduction') {
+    p.heat = Math.max(0, p.heat - destLocObj.modifier.value);
+  }
+
   // Tribute (L3 campaign: +50%)
   const tributeMultiplier = (gameMode === 'campaign' && p.campaignLevel === 3) ? getLevelConfig(3).territoryTributeMultiplier : 1;
   const trib = Math.round(Object.values(p.territories).reduce((s, d) => s + (d.tribute || 0), 0) * tributeMultiplier);
@@ -412,7 +423,8 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   p.cash += trib * td;
 
   // ── Customs Check (inter-region with inventory, persona evasion bonus) ──
-  if (isInterRegion) {
+  // France: Schengen zone — no customs checks. Makes France the safe transit hub for drug shipments.
+  if (isInterRegion && destRegion.id !== 'france') {
     const customsResult = mods.customsEvasionBonus > 0
       ? (C(mods.customsEvasionBonus) ? null : customsCheck(p, destRegion))
       : customsCheck(p, destRegion);
@@ -427,6 +439,10 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
       p.cash -= customsResult.fine;
       p.heat = Math.min(HEAT_CAP, p.heat + customsResult.heatGain);
       p.customsCaught++;
+      // Track customs confiscation in trade log
+      if (customsResult.confiscatedDrug) {
+        p.tradeLog = [...(p.tradeLog || []), { day: p.day, action: 'customs', drug: customsResult.confiscatedDrug, qty: customsResult.confiscatedQty, price: -customsResult.fine, location: p.location }].slice(-50);
+      }
       p.eventLog = [...p.eventLog, { day: p.day, message: `🛃 ${customsResult.message}`, type: 'customs' as const }];
       effects.push({ type: 'shake' }, { type: 'haptic', style: 'warning' });
       notifications.push({ message: customsResult.message, type: 'danger' });
@@ -447,6 +463,31 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   p.currentEvent = ev;
   p.previousPrices = { ...p.prices };
   p.prices = generatePrices(p.location, ev, p.campaignLevel, gameMode);
+
+  // ── Price Memory: recent heavy trading adjusts prices ──
+  const destRegionId = currentRegion.id;
+  const recentForRegion = (p.recentTrades || []).filter(t => t.region === destRegionId && t.day >= p.day - 3);
+  for (const drugId of Object.keys(p.prices)) {
+    if (p.prices[drugId] == null) continue;
+    const buyQty = recentForRegion.filter(t => t.drug === drugId && t.type === 'buy').reduce((s, t) => s + t.qty, 0);
+    const sellQty = recentForRegion.filter(t => t.drug === drugId && t.type === 'sell').reduce((s, t) => s + t.qty, 0);
+    let priceAdj = 1.0;
+    if (buyQty > 10) priceAdj *= 1.08;  // Supply drying up — buy price goes up
+    if (sellQty > 10) priceAdj *= 0.92; // Market flooded — sell price goes down
+    if (priceAdj !== 1.0) {
+      p.prices[drugId] = Math.max(1, Math.round((p.prices[drugId] as number) * priceAdj));
+    }
+  }
+
+  // ── Price History: track last 10 prices per drug for sparklines ──
+  const ph = { ...(p.priceHistory || {}) };
+  for (const drugId of Object.keys(p.prices)) {
+    if (p.prices[drugId] == null) continue;
+    const arr = [...(ph[drugId] || []), p.prices[drugId] as number];
+    ph[drugId] = arr.slice(-10);
+  }
+  p.priceHistory = ph;
+
   if (ev) {
     const regionEmoji = currentRegion.id !== 'nyc' ? `${currentRegion.emoji} ` : '';
     p.eventLog = [...p.eventLog, { day: p.day, message: `${regionEmoji}${ev.message}`, type: ev.type }];
@@ -677,6 +718,11 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   if (localGangForCops && getGangFavorTier(p.gangRelations[localGangForCops.id] ?? 0) >= 2) {
     copBase -= 0.05;
   }
+  // Location modifier: copReduction
+  const copLocObj = LOCATIONS.find(l => l.id === p.location);
+  if (copLocObj?.modifier?.type === 'copReduction') {
+    copBase -= copLocObj.modifier.value;
+  }
   const copChance = Math.min(0.65, Math.max(0, copBase));
   if (C(copChance) && curUsed > 0) {
     const maxOfficers = Math.min(6, 2 + Math.floor(p.heat / 35) + law.aggressionBase);
@@ -782,10 +828,22 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   return { player: p, phase: 'playing', effects, notifications };
 }
 
+// ── Hostile Gang Trade Block ──────────────────────────────
+export function getBlockingGang(player: PlayerState, locationId: string): {name: string, id: string} | null {
+  for (const gang of GANGS) {
+    if (gang.turf.includes(locationId) && (player.gangRelations[gang.id] ?? 0) < -10) {
+      return { name: gang.name, id: gang.id };
+    }
+  }
+  return null;
+}
+
 // ── Trade (rebalanced heat) ───────────────────────────────
 export interface TradeResult {
   player: PlayerState;
   effects: SideEffect[];
+  blocked?: boolean;
+  blockMessage?: string;
 }
 
 export function executeTrade(player: PlayerState, drugId: string, tradeType: 'buy' | 'sell', quantity: number | 'max'): TradeResult {
@@ -794,25 +852,50 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
   const price = player.prices[drug.id] as number;
   if (!price) return { player, effects };
 
+  // ── Hostile gang blocks trading on their turf ──
+  const blocker = getBlockingGang(player, player.location);
+  if (blocker) {
+    return { player, effects, blocked: true, blockMessage: `${blocker.name} won't let you trade here. Pay tribute or build relations first.` };
+  }
+
   const p = { ...player };
   const used = inventoryCount(p.inventory);
   const effectiveSpace = p.space - getFingerSpacePenalty(p.fingers);
   const free = effectiveSpace - used;
 
+  // ── Location modifier lookup ──
+  const tradeLoc = LOCATIONS.find(l => l.id === p.location);
+  const locMod = tradeLoc?.modifier;
+
   if (tradeType === 'buy') {
-    const mx = Math.min(Math.floor(p.cash / price), free);
+    // Location modifier: buyDiscount
+    let buyPrice = price;
+    if (locMod?.type === 'buyDiscount') {
+      const applies = !locMod.drugs || locMod.drugs.includes(drug.id);
+      if (applies) buyPrice = Math.max(1, Math.round(price * (1 - locMod.value)));
+    }
+
+    const mx = Math.min(Math.floor(p.cash / buyPrice), free);
     const q = quantity === 'max' ? mx : Math.min(quantity, mx);
     if (q <= 0) return { player, effects };
 
-    p.cash -= q * price;
+    p.cash -= q * buyPrice;
     p.inventory = { ...p.inventory, [drug.id]: (p.inventory[drug.id] || 0) + q };
     const prevQty = player.inventory[drug.id] || 0;
     const prevAvg = player.averageCosts[drug.id] || 0;
-    p.averageCosts = { ...p.averageCosts, [drug.id]: (prevAvg * prevQty + price * q) / (prevQty + q) };
+    p.averageCosts = { ...p.averageCosts, [drug.id]: (prevAvg * prevQty + buyPrice * q) / (prevQty + q) };
     // Buy heat: ceil(qty * price / 15000) capped at 15 + persona
     const bMods = getPersonaModifiers(p.personaId);
-    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(15, Math.ceil(q * price / 15000)) * bMods.heatGainMultiplier));
+    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(15, Math.ceil(q * buyPrice / 15000)) * bMods.heatGainMultiplier));
     p.trades++;
+
+    // Track recent trades for price memory
+    const buyRegion = getRegionForLocation(p.location)?.id || 'nyc';
+    p.recentTrades = [...(p.recentTrades || []).filter(t => t.day >= p.day - 3), { day: p.day, drug: drug.id, qty: q, type: 'buy', region: buyRegion }];
+
+    // Track trade log
+    p.tradeLog = [...(p.tradeLog || []), { day: p.day, action: 'buy', drug: drug.id, qty: q, price: buyPrice, location: p.location }].slice(-50);
+
     effects.push({ type: 'sfx', sound: 'buy' }, { type: 'haptic', style: 'light' });
   } else {
     const own = p.inventory[drug.id] || 0;
@@ -824,7 +907,13 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
     // Gang favor: Blood Brother = +10% sell on turf
     const localGangForSell = GANGS.find(g => g.turf.includes(p.location));
     const favorSellBonus = localGangForSell && getGangFavorTier(p.gangRelations[localGangForSell.id] ?? 0) >= 3 ? 0.10 : 0;
-    const rev = Math.round(q * price * (1 - fingerPenalty) * (1 + tMods.sellPriceBonus + favorSellBonus));
+    // Location modifier: sellBonus
+    let locSellBonus = 0;
+    if (locMod?.type === 'sellBonus') {
+      const applies = !locMod.drugs || locMod.drugs.includes(drug.id);
+      if (applies) locSellBonus = locMod.value;
+    }
+    const rev = Math.round(q * price * (1 - fingerPenalty) * (1 + tMods.sellPriceBonus + favorSellBonus + locSellBonus));
     const ab = p.averageCosts[drug.id] || price;
     const pnl = rev - q * ab;
 
@@ -845,7 +934,9 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
       p.streak++;
       if (p.streak > p.maxStreak) p.maxStreak = p.streak;
       p.combo = Math.min(5, 1 + p.streak * 0.15);
-      p.rep += Math.ceil((pnl / 4000) * p.combo * tMods.repGainMultiplier);
+      // Location modifier: repGain
+      const locRepMult = locMod?.type === 'repGain' ? (1 + locMod.value) : 1;
+      p.rep += Math.ceil((pnl / 4000) * p.combo * tMods.repGainMultiplier * locRepMult);
       const g = GANGS.find(x => x.turf.includes(p.location));
       if (g) p.gangRelations = { ...p.gangRelations, [g.id]: (p.gangRelations[g.id] ?? 0) + Math.round(1 * tMods.gangRelGainMultiplier) };
       // Track muscle mission progress
@@ -871,6 +962,13 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
     p.trades++;
     // Sell heat: ceil(rev / 20000) capped at 12 + persona
     p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(12, Math.ceil(rev / 20000)) * tMods.heatGainMultiplier));
+
+    // Track recent trades for price memory
+    const sellRegion = getRegionForLocation(p.location)?.id || 'nyc';
+    p.recentTrades = [...(p.recentTrades || []).filter(t => t.day >= p.day - 3), { day: p.day, drug: drug.id, qty: q, type: 'sell', region: sellRegion }];
+
+    // Track trade log (with profit for sells)
+    p.tradeLog = [...(p.tradeLog || []), { day: p.day, action: 'sell', drug: drug.id, qty: q, price, location: p.location, profit: pnl }].slice(-50);
   }
 
   const { milestones, newMilestone } = checkMilestones(p);
@@ -1817,6 +1915,9 @@ export function createLevelTransitionState(player: PlayerState, nextLevel: Campa
   p.currentEvent = null;
   p.nearMisses = [];
   p.recentSold = [];
+  p.recentTrades = [];
+  p.priceHistory = {};
+  p.tradeLog = [];
   p.eventLog = [{ day: 1, message: `Level ${nextLevel}: ${config.name} begins!`, type: 'levelUp' as const }];
 
   // Regenerate prices for current location
@@ -2009,8 +2110,10 @@ export function resolveTerritoryRaid(player: PlayerState, raid: { gangId: string
   const locName = loc?.name || 'territory';
 
   if (defend) {
-    // Auto-defend — fight encounter
-    const winChance = p.gun ? 0.45 : 0.20;
+    // Auto-defend — fight encounter (location modifier: raidDefense)
+    const raidLoc = LOCATIONS.find(l => l.id === raid.locationId);
+    const raidDefenseBonus = raidLoc?.modifier?.type === 'raidDefense' ? raidLoc.modifier.value : 0;
+    const winChance = (p.gun ? 0.45 : 0.20) + raidDefenseBonus;
     if (C(winChance)) {
       p.rep += 3;
       p.heat = Math.min(HEAT_CAP, p.heat + 5);
