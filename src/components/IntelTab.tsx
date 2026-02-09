@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled } from '../constants/game';
@@ -21,6 +21,52 @@ function getFavorPerks(tier: number): string[] {
   return perks;
 }
 
+function Section({ title, count, defaultOpen = false, children }: { title: string; count?: number; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const { colors } = useTheme();
+  return (
+    <View style={{ marginTop: 10 }}>
+      <TouchableOpacity onPress={() => setOpen(!open)} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+        <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, fontWeight: '600' }}>
+          {open ? '\u25BC' : '\u25B6'} {title}
+        </Text>
+        {count !== undefined && count > 0 && (
+          <View style={{ backgroundColor: colors.bgCardHover, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6 }}>
+            <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>{count}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+      {open && children}
+    </View>
+  );
+}
+
+function getLogPrefix(type: string): string {
+  switch (type) {
+    case 'spike':
+    case 'crash':
+      return 'MARKET: ';
+    case 'danger':
+      return 'POLICE: ';
+    case 'tip':
+      return 'INTEL: ';
+    case 'customs':
+      return 'CUSTOMS: ';
+    case 'consignment':
+      return 'CONSIGNMENT: ';
+    case 'gangLoan':
+      return 'LOAN: ';
+    case 'mission':
+      return 'MISSION: ';
+    case 'gangWar':
+      return 'WAR: ';
+    case 'levelUp':
+      return 'LEVEL: ';
+    default:
+      return '';
+  }
+}
+
 export function IntelTab() {
   const { colors } = useTheme();
   const cp = useGameStore(s => s.player);
@@ -41,69 +87,70 @@ export function IntelTab() {
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 }}>
       {/* Rat */}
-      <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginBottom: 6, fontWeight: '600' }}>INFORMANT</Text>
-      {cp.rat.hired && cp.rat.alive ? (
-        <View style={{
-          backgroundColor: 'rgba(124,58,237,0.04)', borderWidth: 1, borderColor: 'rgba(124,58,237,0.12)',
-          borderRadius: 8, padding: 10,
-        }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.purpleLight }}>{cp.rat.name}</Text>
-            <Text style={{
-              fontSize: 13,
-              color: cp.rat.loyalty > 60 ? colors.green : cp.rat.loyalty > 30 ? colors.yellow : colors.red,
-            }}>
-              {cp.rat.personality} {'\u2022'} {cp.rat.loyalty}%
-            </Text>
-          </View>
-          <Bar
-            percent={cp.rat.loyalty}
-            color={cp.rat.loyalty > 60 ? colors.purpleDark : cp.rat.loyalty > 30 ? colors.yellow : colors.red}
-          />
-          <Text style={{ fontSize: 13, color: colors.textMuted, marginVertical: 4 }}>
-            Intel: {'\u2B50'.repeat(cp.rat.intel)} {'\u2022'} Tips: {cp.rat.tips}
-          </Text>
-
-          {/* Pending Tip */}
-          {pendingTip && tipDrug && (
-            <View style={{
-              backgroundColor: 'rgba(124,58,237,0.08)', borderRadius: 6, padding: 8, marginVertical: 4,
-              borderWidth: 1, borderColor: 'rgba(124,58,237,0.18)',
-            }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.purpleLight, marginBottom: 3 }}>{cp.rat.name} says:</Text>
-              <Text style={{ fontSize: 14, color: colors.purpleLight, fontStyle: 'italic' }}>
-                "{tipDrug.emoji} {tipDrug.name} gonna {pendingTip.direction === 'spike' ? 'explode' : 'crash'} soon..."
+      <Section title="INFORMANT" defaultOpen={cp.rat.hired && cp.rat.alive}>
+        {cp.rat.hired && cp.rat.alive ? (
+          <View style={{
+            backgroundColor: 'rgba(124,58,237,0.04)', borderWidth: 1, borderColor: 'rgba(124,58,237,0.12)',
+            borderRadius: 8, padding: 10,
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.purpleLight }}>{cp.rat.name}</Text>
+              <Text style={{
+                fontSize: 13,
+                color: cp.rat.loyalty > 60 ? colors.green : cp.rat.loyalty > 30 ? colors.yellow : colors.red,
+              }}>
+                {cp.rat.personality} {'\u2022'} {cp.rat.loyalty}%
               </Text>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                <Text style={{ fontSize: 13, color: colors.yellow, fontWeight: '600' }}>
-                  {'\u2B50'.repeat(pendingTip.confidence)} {pendingTip.confidence >= 3 ? 'HIGH' : pendingTip.confidence >= 2 ? 'MED' : 'LOW'}
-                </Text>
-                <Text style={{ fontSize: 13, color: colors.textMuted }}>
-                  ~{pendingTip.turnsUntil > 0 ? `${pendingTip.turnsUntil} turn${pendingTip.turnsUntil > 1 ? 's' : ''}` : 'now!'}
-                </Text>
-              </View>
             </View>
-          )}
+            <Bar
+              percent={cp.rat.loyalty}
+              color={cp.rat.loyalty > 60 ? colors.purpleDark : cp.rat.loyalty > 30 ? colors.yellow : colors.red}
+            />
+            <Text style={{ fontSize: 13, color: colors.textMuted, marginVertical: 4 }}>
+              Intel: {'\u2B50'.repeat(cp.rat.intel)} {'\u2022'} Tips: {cp.rat.tips}
+            </Text>
 
-          {cp.rat.loyalty < 40 && (
-            <Text style={{ fontSize: 14, color: colors.red, fontWeight: '600' }}>Might flip!</Text>
-          )}
-          <TouchableOpacity
-            style={[
-              { backgroundColor: '#6d28d9', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 12, marginTop: 4, alignSelf: 'flex-start' },
-              cp.cash < 150 && { opacity: 0.4 },
-            ]}
-            onPress={payRatAction}
-            disabled={cp.cash < 150}
-          >
-            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Pay ($150){!pendingTip ? ' -- may get intel' : ''}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : cp.rat.hired ? (
-        <Text style={{ fontSize: 14, color: colors.red, padding: 10 }}>{cp.rat.name} sold you out.</Text>
-      ) : (
-        <Text style={{ fontSize: 14, color: colors.textDark, padding: 10 }}>No informant yet.</Text>
-      )}
+            {/* Pending Tip */}
+            {pendingTip && tipDrug && (
+              <View style={{
+                backgroundColor: 'rgba(124,58,237,0.08)', borderRadius: 6, padding: 8, marginVertical: 4,
+                borderWidth: 1, borderColor: 'rgba(124,58,237,0.18)',
+              }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.purpleLight, marginBottom: 3 }}>{cp.rat.name} says:</Text>
+                <Text style={{ fontSize: 14, color: colors.purpleLight, fontStyle: 'italic' }}>
+                  "{tipDrug.emoji} {tipDrug.name} gonna {pendingTip.direction === 'spike' ? 'explode' : 'crash'} soon..."
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                  <Text style={{ fontSize: 13, color: colors.yellow, fontWeight: '600' }}>
+                    {'\u2B50'.repeat(pendingTip.confidence)} {pendingTip.confidence >= 3 ? 'HIGH' : pendingTip.confidence >= 2 ? 'MED' : 'LOW'}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                    ~{pendingTip.turnsUntil > 0 ? `${pendingTip.turnsUntil} turn${pendingTip.turnsUntil > 1 ? 's' : ''}` : 'now!'}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {cp.rat.loyalty < 40 && (
+              <Text style={{ fontSize: 14, color: colors.red, fontWeight: '600' }}>Might flip!</Text>
+            )}
+            <TouchableOpacity
+              style={[
+                { backgroundColor: '#6d28d9', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 12, marginTop: 4, alignSelf: 'flex-start' },
+                cp.cash < 150 && { opacity: 0.4 },
+              ]}
+              onPress={payRatAction}
+              disabled={cp.cash < 150}
+            >
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Pay ($150){!pendingTip ? ' -- may get intel' : ''}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : cp.rat.hired ? (
+          <Text style={{ fontSize: 14, color: colors.red, padding: 10 }}>{cp.rat.name} sold you out.</Text>
+        ) : (
+          <Text style={{ fontSize: 14, color: colors.textDark, padding: 10 }}>No informant yet.</Text>
+        )}
+      </Section>
 
       {/* Consignment */}
       {cp.consignment && (() => {
@@ -112,8 +159,7 @@ export function IntelTab() {
         const conDrug = DRUGS.find(d => d.id === con.drugId);
         const conLoc = LOCATIONS.find(l => l.id === con.originLocation);
         return (
-          <>
-            <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>CONSIGNMENT</Text>
+          <Section title="CONSIGNMENT" defaultOpen={!!cp.consignment}>
             <View style={{
               backgroundColor: 'rgba(234,179,8,0.04)', borderWidth: 1, borderColor: 'rgba(234,179,8,0.12)',
               borderRadius: 8, padding: 10,
@@ -154,7 +200,7 @@ export function IntelTab() {
                 </TouchableOpacity>
               </View>
             </View>
-          </>
+          </Section>
         );
       })()}
 
@@ -164,8 +210,7 @@ export function IntelTab() {
         const loanGang = GANGS.find(g => g.id === loan.gangId);
         const remaining = loan.amountOwed - loan.amountPaid;
         return (
-          <>
-            <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>GANG LOAN</Text>
+          <Section title="GANG LOAN" defaultOpen={!!cp.gangLoan}>
             <View style={{
               backgroundColor: 'rgba(234,179,8,0.04)', borderWidth: 1, borderColor: 'rgba(234,179,8,0.12)',
               borderRadius: 8, padding: 10,
@@ -205,7 +250,7 @@ export function IntelTab() {
                 </TouchableOpacity>
               </View>
             </View>
-          </>
+          </Section>
         );
       })()}
 
@@ -215,8 +260,7 @@ export function IntelTab() {
         const mGang = GANGS.find(g => g.id === mission.gangId);
         const targetLoc = mission.targetLocation ? LOCATIONS.find(l => l.id === mission.targetLocation) : null;
         return (
-          <>
-            <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>ACTIVE MISSION</Text>
+          <Section title="ACTIVE MISSION" defaultOpen={!!cp.gangMission}>
             <View style={{
               backgroundColor: 'rgba(99,102,241,0.04)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.12)',
               borderRadius: 8, padding: 10,
@@ -234,14 +278,13 @@ export function IntelTab() {
                 </Text>
               )}
             </View>
-          </>
+          </Section>
         );
       })()}
 
       {/* Fingers */}
       {cp.fingers < 10 && (
-        <>
-          <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>FINGERS</Text>
+        <Section title="FINGERS" defaultOpen={cp.fingers < 10}>
           <Text style={[
             { fontSize: 14, paddingHorizontal: 10, paddingVertical: 4 },
             { color: cp.fingers <= 4 ? colors.red : cp.fingers <= 6 ? colors.yellow : colors.orangeLight },
@@ -250,82 +293,83 @@ export function IntelTab() {
             {cp.fingers <= 6 ? ' \u2022 +1 travel day' : ''}
             {cp.fingers <= 4 ? " \u2022 Can't hold a gun" : ''}
           </Text>
-        </>
+        </Section>
       )}
 
       {/* Territories */}
-      <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>TERRITORIES</Text>
-      {Object.keys(cp.territories).length > 0 ? (
-        <View>
-          {Object.entries(cp.territories).map(([id, d]) => {
-            const l = LOCATIONS.find(x => x.id === id);
-            return (
-              <View key={id} style={{
-                flexDirection: 'row', justifyContent: 'space-between',
-                backgroundColor: 'rgba(34,197,94,0.03)', borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 3,
-              }}>
-                <Text style={{ fontSize: 14, color: colors.greenLight }}>{l?.emoji} {l?.name}</Text>
-                <Text style={{ fontSize: 14, color: colors.green, fontWeight: '700' }}>+{$(d.tribute)}/d</Text>
-              </View>
-            );
-          })}
-          <Text style={{ fontSize: 13, color: colors.green, fontWeight: '600' }}>Total: {$(cp.tributePerDay)}/day</Text>
-        </View>
-      ) : (
-        <Text style={{ fontSize: 14, color: colors.textDark }}>None yet. Build rep.</Text>
-      )}
-
-      {/* Gangs — expanded cards */}
-      <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>GANGS</Text>
-      {GANGS.map(g => {
-        const rel = cp.gangRelations[g.id] ?? 0;
-        const tier = getGangFavorTier(rel);
-        const { label, color: favorColor } = getFavorLabel(rel);
-        const perks = getFavorPerks(tier);
-        const barPercent = Math.max(0, Math.min(100, ((rel + 30) / 55) * 100));
-
-        return (
-          <View key={g.id} style={{
-            backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
-            borderRadius: 8, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: g.color,
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: g.color }}>{g.name}</Text>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                  Turf: {g.turf.map(t => LOCATIONS.find(l => l.id === t)?.name || t).join(', ')}
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: rel > 0 ? colors.green : rel < 0 ? colors.red : colors.textMuted }}>
-                  {rel > 0 ? '+' : ''}{rel}
-                </Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: favorColor }}>{label}</Text>
-              </View>
-            </View>
-            <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
-              <View style={{ height: '100%', width: `${barPercent}%`, backgroundColor: favorColor, borderRadius: 2 }} />
-            </View>
-            {perks.length > 0 && (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                {perks.map((perk, i) => (
-                  <View key={i} style={{
-                    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2,
-                  }}>
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}>{perk}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
+      <Section title="TERRITORIES" count={Object.keys(cp.territories).length}>
+        {Object.keys(cp.territories).length > 0 ? (
+          <View>
+            {Object.entries(cp.territories).map(([id, d]) => {
+              const l = LOCATIONS.find(x => x.id === id);
+              return (
+                <View key={id} style={{
+                  flexDirection: 'row', justifyContent: 'space-between',
+                  backgroundColor: 'rgba(34,197,94,0.03)', borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 3,
+                }}>
+                  <Text style={{ fontSize: 14, color: colors.greenLight }}>{l?.emoji} {l?.name}</Text>
+                  <Text style={{ fontSize: 14, color: colors.green, fontWeight: '700' }}>+{$(d.tribute)}/d</Text>
+                </View>
+              );
+            })}
+            <Text style={{ fontSize: 13, color: colors.green, fontWeight: '600' }}>Total: {$(cp.tributePerDay)}/day</Text>
           </View>
-        );
-      })}
+        ) : (
+          <Text style={{ fontSize: 14, color: colors.textDark }}>None yet. Build rep.</Text>
+        )}
+      </Section>
+
+      {/* Gangs -- expanded cards */}
+      <Section title="GANGS" count={GANGS.length} defaultOpen={false}>
+        {GANGS.map(g => {
+          const rel = cp.gangRelations[g.id] ?? 0;
+          const tier = getGangFavorTier(rel);
+          const { label, color: favorColor } = getFavorLabel(rel);
+          const perks = getFavorPerks(tier);
+          const barPercent = Math.max(0, Math.min(100, ((rel + 30) / 55) * 100));
+
+          return (
+            <View key={g.id} style={{
+              backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+              borderRadius: 8, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: g.color,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: g.color }}>{g.name}</Text>
+                  <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                    Turf: {g.turf.map(t => LOCATIONS.find(l => l.id === t)?.name || t).join(', ')}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: rel > 0 ? colors.green : rel < 0 ? colors.red : colors.textMuted }}>
+                    {rel > 0 ? '+' : ''}{rel}
+                  </Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: favorColor }}>{label}</Text>
+                </View>
+              </View>
+              <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+                <View style={{ height: '100%', width: `${barPercent}%`, backgroundColor: favorColor, borderRadius: 2 }} />
+              </View>
+              {perks.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                  {perks.map((perk, i) => (
+                    <View key={i} style={{
+                      backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2,
+                    }}>
+                      <Text style={{ fontSize: 11, color: colors.textMuted }}>{perk}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </Section>
 
       {/* Gang Wars (L3 Campaign only) */}
       {gangWarsEnabled && (
-        <>
-          <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>GANG WARS</Text>
+        <Section title="GANG WARS" defaultOpen={gangWarsEnabled}>
           {campaign.gangWar.activeWar ? (() => {
             const war = campaign.gangWar.activeWar!;
             const warGang = GANGS.find(g => g.id === war.targetGangId);
@@ -377,49 +421,51 @@ export function IntelTab() {
               })()}
             </View>
           )}
-        </>
+        </Section>
       )}
 
       {/* Milestones */}
-      <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>MILESTONES</Text>
-      <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-        {MILESTONES.map(m => (
-          <Text
-            key={m.id}
-            style={[
-              { fontSize: 22 },
-              !cp.milestones?.includes(m.id) && { opacity: 0.1 },
-            ]}
-          >
-            {m.emoji}
-          </Text>
-        ))}
-      </View>
+      <Section title="MILESTONES" count={cp.milestones?.length || 0}>
+        <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+          {MILESTONES.map(m => (
+            <Text
+              key={m.id}
+              style={[
+                { fontSize: 22 },
+                !cp.milestones?.includes(m.id) && { opacity: 0.1 },
+              ]}
+            >
+              {m.emoji}
+            </Text>
+          ))}
+        </View>
+      </Section>
 
       {/* Log */}
-      <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>LOG</Text>
-      <View style={{ maxHeight: 180 }}>
-        {[...cp.eventLog].reverse().slice(0, 10).map((e, i) => (
-          <Text key={i} style={[
-            { fontSize: 13, paddingVertical: 2 },
-            {
-              color: e.type === 'danger' ? colors.redLight
-                : e.type === 'spike' ? colors.pinkLight
-                : e.type === 'crash' ? colors.greenLight
-                : e.type === 'tip' ? colors.purpleLight
-                : e.type === 'customs' ? colors.orangeLight
-                : e.type === 'gangLoan' ? '#fbbf24'
-                : e.type === 'mission' ? colors.indigoLight
-                : e.type === 'gangWar' ? colors.red
-                : e.type === 'levelUp' ? colors.yellow
-                : colors.textMuted,
-              opacity: 1 - i * 0.06,
-            },
-          ]}>
-            <Text style={{ color: colors.textDarkest }}>D{e.day}</Text> {e.message}
-          </Text>
-        ))}
-      </View>
+      <Section title="LOG" count={cp.eventLog.length} defaultOpen={false}>
+        <View style={{ maxHeight: 180 }}>
+          {[...cp.eventLog].reverse().slice(0, 10).map((e, i) => (
+            <Text key={i} style={[
+              { fontSize: 13, paddingVertical: 2 },
+              {
+                color: e.type === 'danger' ? colors.redLight
+                  : e.type === 'spike' ? colors.pinkLight
+                  : e.type === 'crash' ? colors.greenLight
+                  : e.type === 'tip' ? colors.purpleLight
+                  : e.type === 'customs' ? colors.orangeLight
+                  : e.type === 'gangLoan' ? '#fbbf24'
+                  : e.type === 'mission' ? colors.indigoLight
+                  : e.type === 'gangWar' ? colors.red
+                  : e.type === 'levelUp' ? colors.yellow
+                  : colors.textMuted,
+                opacity: 1 - i * 0.06,
+              },
+            ]}>
+              <Text style={{ color: colors.textDarkest }}>D{e.day}</Text> {getLogPrefix(e.type)}{e.message}
+            </Text>
+          ))}
+        </View>
+      </Section>
     </ScrollView>
   );
 }

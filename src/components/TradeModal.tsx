@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { $, DRUGS } from '../constants/game';
-import { inventoryCount } from '../lib/game-logic';
+import { inventoryCount, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
 export function TradeModal() {
@@ -21,7 +21,8 @@ export function TradeModal() {
   const own = cp.inventory[drug.id] || 0;
   const isBuy = activeTrade.type === 'buy';
   const used = inventoryCount(cp.inventory);
-  const free = cp.space - used;
+  const maxSpace = effectiveSpace(cp);
+  const free = maxSpace - used;
   const maxBuy = price ? Math.min(Math.floor(cp.cash / price), free) : 0;
   const maxQty = isBuy ? maxBuy : own;
   const q = tradeQuantity === 'max' ? maxQty : Math.min(parseInt(tradeQuantity) || 0, maxQty);
@@ -30,7 +31,21 @@ export function TradeModal() {
   const pnl = !isBuy && avg ? q * (price - avg) : 0;
   const pnlPct = !isBuy && avg ? ((price - avg) / avg * 100) : 0;
 
+  const spaceAfter = isBuy ? used + q : used - q;
+
   const quickAmounts = [1, 5, 10, 25, 50].filter(n => n <= maxQty);
+
+  // Quick percentage buttons for 25%, 50%, 75%
+  const pctButtons: { label: string; value: number }[] = [];
+  if (maxQty > 3) {
+    const q25 = Math.floor(maxQty * 0.25);
+    if (q25 >= 1) pctButtons.push({ label: '25%', value: q25 });
+    pctButtons.push({ label: '1/2', value: Math.floor(maxQty / 2) });
+    const q75 = Math.floor(maxQty * 0.75);
+    if (q75 > Math.floor(maxQty / 2)) pctButtons.push({ label: '75%', value: q75 });
+  } else if (maxQty > 2) {
+    pctButtons.push({ label: '1/2', value: Math.floor(maxQty / 2) });
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
@@ -42,9 +57,16 @@ export function TradeModal() {
         <Text style={{ color: colors.textDim, fontSize: 16 }}>{$(price)} each</Text>
 
         {!isBuy && avg ? (
-          <Text style={{ fontSize: 26, fontWeight: '900', marginVertical: 6, color: pnlPct > 0 ? colors.green : colors.red }}>
-            {pnlPct > 0 ? '+' : ''}{pnlPct.toFixed(0)}%
-          </Text>
+          <View style={{ alignItems: 'center', marginVertical: 6 }}>
+            <Text style={{ fontSize: 26, fontWeight: '900', color: pnlPct > 0 ? colors.green : colors.red }}>
+              {pnlPct > 0 ? '+' : ''}{pnlPct.toFixed(0)}%
+            </Text>
+            {pnlPct < 0 && (
+              <Text style={{ color: colors.red, fontSize: 13, fontWeight: '700', marginTop: 2 }}>
+                Selling at a loss
+              </Text>
+            )}
+          </View>
         ) : null}
 
         <Text style={{ color: colors.textMuted, fontSize: 15, marginBottom: 14 }}>
@@ -75,14 +97,14 @@ export function TradeModal() {
               <Text style={{ color: colors.textDim, fontSize: 14, fontWeight: '600' }}>{n}</Text>
             </TouchableOpacity>
           ))}
-          {maxQty > 2 && (
-            <TouchableOpacity style={{
+          {pctButtons.map(btn => (
+            <TouchableOpacity key={btn.label} style={{
               backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder,
               borderRadius: 5, paddingVertical: 8, paddingHorizontal: 14,
-            }} onPress={() => setTradeQuantity(String(Math.floor(maxQty / 2)))}>
-              <Text style={{ color: colors.textDim, fontSize: 14, fontWeight: '600' }}>1/2</Text>
+            }} onPress={() => setTradeQuantity(String(btn.value))}>
+              <Text style={{ color: colors.textDim, fontSize: 14, fontWeight: '600' }}>{btn.label}</Text>
             </TouchableOpacity>
-          )}
+          ))}
           <TouchableOpacity style={{
             backgroundColor: colors.green, borderRadius: 5, paddingVertical: 8, paddingHorizontal: 14,
           }} onPress={() => setTradeQuantity('max')}>
@@ -91,14 +113,19 @@ export function TradeModal() {
         </View>
 
         {q > 0 && (
-          <Text style={{ fontSize: 16, color: colors.textDim, marginVertical: 12 }}>
-            Total: <Text style={{ color: colors.white, fontWeight: '700' }}>{$(total)}</Text>
+          <View style={{ alignItems: 'center', marginVertical: 12 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: colors.white, marginBottom: 4 }}>
+              {isBuy ? 'Cost' : 'Revenue'}: {$(total)}
+            </Text>
             {!isBuy && pnl !== 0 && (
-              <Text style={{ color: pnl > 0 ? colors.green : colors.red, fontWeight: '700' }}>
-                {' '}({pnl > 0 ? '+' : ''}{$(pnl)})
+              <Text style={{ fontSize: 16, fontWeight: '700', color: pnl > 0 ? colors.green : colors.red }}>
+                Profit: {pnl > 0 ? '+' : ''}{$(pnl)} ({pnlPct > 0 ? '+' : ''}{pnlPct.toFixed(0)}%)
               </Text>
             )}
-          </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 4 }}>
+              Space after: {spaceAfter}/{maxSpace}
+            </Text>
+          </View>
         )}
 
         <View style={{ flexDirection: 'row', gap: 10 }}>

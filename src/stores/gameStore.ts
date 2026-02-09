@@ -40,6 +40,7 @@ interface GameStore {
   subPanel: string | null;
   notifications: Notification[];
   hasSeenRules: boolean;
+  helpSeen: Record<string, boolean>;
 
   // Ad state
   travelCount: number;
@@ -82,6 +83,7 @@ interface GameStore {
   setPlayerName: (name: string) => void;
   dismissRules: () => void;
   dismissAd: () => void;
+  markHelpSeen: (key: string) => void;
   resetToTitle: () => void;
   notify: (message: string, type?: string) => void;
   clearNotifications: () => void;
@@ -107,6 +109,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   subPanel: null,
   notifications: [],
   hasSeenRules: false,
+  helpSeen: {},
   travelCount: 0,
   showingAd: false,
 
@@ -382,6 +385,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   dismissAd: () => set({ showingAd: false }),
 
+  markHelpSeen: (key) => set(s => ({ helpSeen: { ...s.helpSeen, [key]: true } })),
+
   resetToTitle: () => {
     set(s => ({
       phase: 'title',
@@ -394,6 +399,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       subPanel: null,
       notifications: [],
       hasSeenRules: s.hasSeenRules,
+      helpSeen: s.helpSeen,
       playerName: s.playerName,
       selectedPersona: null,
       travelCount: 0,

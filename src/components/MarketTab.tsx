@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, DRUGS, GANGS, LOCATIONS, STASH_CAPACITY, isFeatureEnabled } from '../constants/game';
-import { inventoryCount, getGangLoanCap } from '../lib/game-logic';
+import { $, DRUGS, GANGS, LOCATIONS, STASH_CAPACITY, BANK_INTEREST, DEBT_INTEREST, isFeatureEnabled } from '../constants/game';
+import { inventoryCount, getGangLoanCap, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
 export function MarketTab() {
@@ -20,7 +20,8 @@ export function MarketTab() {
   const payGangLoan = useGameStore(s => s.payGangLoan);
 
   const used = inventoryCount(cp.inventory);
-  const free = cp.space - used;
+  const espce = effectiveSpace(cp);
+  const free = espce - used;
   const loc = LOCATIONS.find(l => l.id === cp.location);
   const hasBank = !!loc?.bank;
   const hasShark = !!loc?.shark;
@@ -54,7 +55,7 @@ export function MarketTab() {
             onPress={() => setSubPanel('bk')}
           >
             <Text style={{ color: colors.blueLight, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
-              Bank {cp.bank > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.bank)})</Text> : null}
+              🏦 Bank {cp.bank > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.bank)})</Text> : null}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -65,7 +66,7 @@ export function MarketTab() {
             onPress={() => setSubPanel('sk')}
           >
             <Text style={{ color: colors.redLight, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
-              Shark {cp.debt > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.debt)})</Text> : null}
+              🦈 Shark {cp.debt > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.debt)})</Text> : null}
             </Text>
           </TouchableOpacity>
         </View>
@@ -129,10 +130,22 @@ export function MarketTab() {
           padding: 10, backgroundColor: colors.bgBlue, borderRadius: 6, marginBottom: 6,
           borderWidth: 1, borderColor: 'rgba(59,130,246,0.1)',
         }}>
-          <Text style={{ fontSize: 14, color: colors.blueLight, marginBottom: 6 }}>Balance: <Text style={{ fontWeight: '700' }}>{$(cp.bank)}</Text> {'\u2022'} 5%/day interest</Text>
+          <Text style={{ fontSize: 14, color: colors.blueLight, marginBottom: 2 }}>
+            Balance: <Text style={{ fontWeight: '700' }}>{$(cp.bank)}</Text> {'\u2022'} {(BANK_INTEREST * 100).toFixed(1)}%/day interest
+          </Text>
+          {cp.bank > 0 && (
+            <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
+              In 5 days: {$(Math.round(cp.bank * Math.pow(1 + BANK_INTEREST, 5)))} {'\u2022'} In 10: {$(Math.round(cp.bank * Math.pow(1 + BANK_INTEREST, 10)))}
+            </Text>
+          )}
+          {cp.bank === 0 && (
+            <Text style={{ fontSize: 12, color: colors.textDark, marginBottom: 6 }}>
+              Deposit cash to earn interest. Safe from cops and theft.
+            </Text>
+          )}
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
             <TouchableOpacity style={smBtn} onPress={() => bank('deposit', 'all')}>
-              <Text style={smBtnText}>Deposit All</Text>
+              <Text style={smBtnText}>Deposit All ({$(cp.cash)})</Text>
             </TouchableOpacity>
             <TouchableOpacity style={smBtn} onPress={() => bank('deposit', Math.floor(cp.cash / 2))}>
               <Text style={smBtnText}>Deposit Half</Text>
@@ -155,7 +168,14 @@ export function MarketTab() {
           padding: 10, backgroundColor: 'rgba(239,68,68,0.04)', borderRadius: 6, marginBottom: 6,
           borderWidth: 1, borderColor: 'rgba(239,68,68,0.1)',
         }}>
-          <Text style={{ fontSize: 14, color: colors.redLight, marginBottom: 2 }}>Debt: <Text style={{ fontWeight: '700' }}>{$(cp.debt)}</Text> {'\u2022'} 10%/day interest!</Text>
+          <Text style={{ fontSize: 14, color: colors.redLight, marginBottom: 2 }}>
+            Debt: <Text style={{ fontWeight: '700' }}>{$(cp.debt)}</Text> {'\u2022'} {(DEBT_INTEREST * 100)}%/day interest
+          </Text>
+          {cp.debt > 0 && (
+            <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 2 }}>
+              In 5 days: {$(Math.round(cp.debt * Math.pow(1 + DEBT_INTEREST, 5)))} {'\u2022'} In 10: {$(Math.round(cp.debt * Math.pow(1 + DEBT_INTEREST, 10)))}
+            </Text>
+          )}
           <Text style={{ fontSize: 14, color: colors.redLight, marginBottom: 6 }}>Cash: <Text style={{ fontWeight: '700' }}>{$(cp.cash)}</Text></Text>
           {cp.debt > 0 && (
             <>
@@ -185,7 +205,7 @@ export function MarketTab() {
               <Text style={smBtnText}>+$10,000</Text>
             </TouchableOpacity>
           </View>
-          <Text style={{ fontSize: 12, color: colors.textDark, marginTop: 6, fontStyle: 'italic' }}>Interest compounds daily. Pay it off fast!</Text>
+          <Text style={{ fontSize: 12, color: colors.textDark, marginTop: 6, fontStyle: 'italic' }}>Interest compounds every travel day. Pay it off fast!</Text>
         </View>
       )}
 
@@ -204,11 +224,19 @@ export function MarketTab() {
         const isRare = !!d.rare;
         const isRareAvailable = isRare && !!pr;
 
+        // Price range position (0-100)
+        const pricePercent = pr ? Math.min(100, Math.max(0, ((pr - d.min) / (d.max - d.min)) * 100)) : 50;
+        const priceZone = pricePercent < 25 ? 'buy' : pricePercent > 75 ? 'sell' : 'mid';
+        const priceBarColor = priceZone === 'buy' ? colors.green : priceZone === 'sell' ? colors.red : colors.yellow;
+
+        // Per-unit profit/loss
+        const perUnitPnl = pr && ab && own > 0 ? pr - ab : null;
+
         return (
           <View key={d.id} style={[
             {
-              flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10,
-              borderRadius: 6, gap: 6, backgroundColor: colors.bgCard,
+              paddingVertical: 8, paddingHorizontal: 10,
+              borderRadius: 6, backgroundColor: colors.bgCard,
               borderLeftWidth: 3, borderLeftColor: 'transparent', marginBottom: 2,
             },
             hasProfitGlow && { backgroundColor: colors.bgSuccess, borderLeftColor: colors.green },
@@ -216,74 +244,102 @@ export function MarketTab() {
             isRareAvailable && { borderLeftColor: '#d4a017' },
             !pr && { opacity: 0.25 },
           ]}>
-            <Text style={{ fontSize: 18, width: 30 }}>{d.emoji}</Text>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{d.name}</Text>
-                {isRareAvailable && (
-                  <View style={{ backgroundColor: '#d4a017', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
-                    <Text style={{ fontSize: 9, fontWeight: '900', color: '#000', letterSpacing: 1 }}>RARE</Text>
-                  </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 18, width: 30 }}>{d.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{d.name}</Text>
+                  {isRareAvailable && (
+                    <View style={{ backgroundColor: '#d4a017', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: '#000', letterSpacing: 1 }}>RARE</Text>
+                    </View>
+                  )}
+                </View>
+                {pc !== null && pc !== 0 && (
+                  <Text style={{ fontSize: 12, color: pc > 0 ? colors.green : colors.red }}>
+                    {pc > 0 ? '\u25B2' : '\u25BC'}{Math.abs(pc).toFixed(0)}%
+                  </Text>
                 )}
               </View>
-              {pc !== null && pc !== 0 && (
-                <Text style={{ fontSize: 12, color: pc > 0 ? colors.green : colors.red }}>
-                  {pc > 0 ? '\u25B2' : '\u25BC'}{Math.abs(pc).toFixed(0)}%
-                </Text>
-              )}
-            </View>
-            <Text style={[
-              { width: 80, textAlign: 'right', fontSize: 16, fontWeight: '800', color: colors.white },
-              !pr && { color: colors.textDarkest },
-            ]}>
-              {pr ? $(pr) : '--'}
-            </Text>
-            <View style={{ width: 44, alignItems: 'center' }}>
               <Text style={[
-                { fontSize: 14 },
-                own > 0 ? { color: colors.text, fontWeight: '700' } : { color: colors.textDarkest },
+                { width: 80, textAlign: 'right', fontSize: 16, fontWeight: '800', color: colors.white },
+                !pr && { color: colors.textDarkest },
               ]}>
-                {own || '--'}
+                {pr ? $(pr) : '--'}
               </Text>
-              {pnl !== null && own > 0 && (
-                <Text style={{ fontSize: 11, fontWeight: '700', color: pnl > 0 ? colors.green : colors.red }}>
-                  {pnl > 0 ? '+' : ''}{pnl.toFixed(0)}%
+              <View style={{ width: 44, alignItems: 'center' }}>
+                <Text style={[
+                  { fontSize: 14 },
+                  own > 0 ? { color: colors.text, fontWeight: '700' } : { color: colors.textDarkest },
+                ]}>
+                  {own || '--'}
                 </Text>
+                {pnl !== null && own > 0 && (
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: pnl > 0 ? colors.green : colors.red }}>
+                    {pnl > 0 ? '+' : ''}{pnl.toFixed(0)}%
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity
+                disabled={!pr || maxBuy <= 0}
+                onPress={() => openTrade(d.id, 'buy')}
+                style={[
+                  { borderRadius: 5, paddingVertical: 8, width: 56, alignItems: 'center' },
+                  pr && maxBuy > 0 ? { backgroundColor: colors.green } : { backgroundColor: colors.disabledBg },
+                ]}
+              >
+                <Text style={[
+                  { fontSize: 13, fontWeight: '800' },
+                  pr && maxBuy > 0 ? { color: '#fff' } : { color: colors.textDarkest },
+                ]}>BUY</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={own <= 0 || !pr}
+                onPress={() => openTrade(d.id, 'sell')}
+                style={[
+                  { borderRadius: 5, paddingVertical: 8, width: 56, alignItems: 'center' },
+                  own > 0 && pr ? { backgroundColor: colors.yellow } : { backgroundColor: colors.disabledBg },
+                ]}
+              >
+                <Text style={[
+                  { fontSize: 13, fontWeight: '800' },
+                  own > 0 && pr ? { color: '#fff' } : { color: colors.textDarkest },
+                ]}>SELL</Text>
+              </TouchableOpacity>
+              {territory && own > 0 && (
+                <TouchableOpacity
+                  onPress={() => stashAction(d.id, own)}
+                  style={{ backgroundColor: colors.cardBorder, borderRadius: 5, paddingVertical: 8, width: 54, alignItems: 'center' }}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textDim }}>STASH</Text>
+                </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity
-              disabled={!pr || maxBuy <= 0}
-              onPress={() => openTrade(d.id, 'buy')}
-              style={[
-                { borderRadius: 5, paddingVertical: 8, width: 56, alignItems: 'center' },
-                pr && maxBuy > 0 ? { backgroundColor: colors.green } : { backgroundColor: colors.disabledBg },
-              ]}
-            >
-              <Text style={[
-                { fontSize: 13, fontWeight: '800' },
-                pr && maxBuy > 0 ? { color: '#fff' } : { color: colors.textDarkest },
-              ]}>BUY</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              disabled={own <= 0 || !pr}
-              onPress={() => openTrade(d.id, 'sell')}
-              style={[
-                { borderRadius: 5, paddingVertical: 8, width: 56, alignItems: 'center' },
-                own > 0 && pr ? { backgroundColor: colors.yellow } : { backgroundColor: colors.disabledBg },
-              ]}
-            >
-              <Text style={[
-                { fontSize: 13, fontWeight: '800' },
-                own > 0 && pr ? { color: '#fff' } : { color: colors.textDarkest },
-              ]}>SELL</Text>
-            </TouchableOpacity>
-            {territory && own > 0 && (
-              <TouchableOpacity
-                onPress={() => stashAction(d.id, own)}
-                style={{ backgroundColor: colors.cardBorder, borderRadius: 5, paddingVertical: 8, width: 54, alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textDim }}>STASH</Text>
-              </TouchableOpacity>
+
+            {/* Price range bar */}
+            {pr && (
+              <View style={{ marginTop: 4, paddingLeft: 36 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ flex: 1, height: 3, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden' }}>
+                    <View style={{
+                      position: 'absolute', left: 0, top: 0, bottom: 0,
+                      width: `${pricePercent}%`, backgroundColor: priceBarColor, borderRadius: 2,
+                    }} />
+                  </View>
+                  <Text style={{ fontSize: 9, color: priceBarColor, fontWeight: '700', width: 28 }}>
+                    {priceZone === 'buy' ? 'LOW' : priceZone === 'sell' ? 'HIGH' : 'MID'}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 9, color: colors.textDarkest }}>{$(d.min)}</Text>
+                  {perUnitPnl !== null && (
+                    <Text style={{ fontSize: 9, fontWeight: '600', color: perUnitPnl > 0 ? colors.green : colors.red }}>
+                      {perUnitPnl > 0 ? '+' : ''}{$(perUnitPnl)}/unit vs avg
+                    </Text>
+                  )}
+                  <Text style={{ fontSize: 9, color: colors.textDarkest }}>{$(d.max)}</Text>
+                </View>
+              </View>
             )}
           </View>
         );
@@ -292,7 +348,7 @@ export function MarketTab() {
       {/* Inventory summary */}
       {Object.keys(cp.inventory).length > 0 && (
         <View style={{ marginTop: 10, gap: 4 }}>
-          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, marginBottom: 2, fontWeight: '600' }}>CARRYING {used}/{cp.space}</Text>
+          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, marginBottom: 2, fontWeight: '600' }}>CARRYING {used}/{espce}</Text>
           {Object.entries(cp.inventory).filter(([, q]) => q > 0).map(([id, q]) => {
             const d = DRUGS.find(x => x.id === id);
             const pr = cp.prices[id] as number | null;

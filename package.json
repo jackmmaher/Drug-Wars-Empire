@@ -10,7 +10,8 @@
     "web": "cross-env NODE_OPTIONS=--no-experimental-strip-types expo start --web",
     "export": "cross-env NODE_OPTIONS=--no-experimental-strip-types expo export",
     "build": "expo export --platform web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "simulate": "npx tsx scripts/simulate.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",

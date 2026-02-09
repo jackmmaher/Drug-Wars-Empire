@@ -5,8 +5,8 @@ export const DAYS = 30;
 export const STARTING_CASH = 3500;
 export const STARTING_DEBT = 4000;
 export const STARTING_SPACE = 100;
-export const DEBT_INTEREST = 0.10;
-export const BANK_INTEREST = 0.05;
+export const DEBT_INTEREST = 0.04;
+export const BANK_INTEREST = 0.008;
 export const HEAT_CAP = 100;
 export const CONSIGNMENT_TURNS = 5;
 export const CONSIGNMENT_MARKUP = 2.0;
@@ -111,22 +111,22 @@ export const REGIONS: Region[] = [
   },
   {
     id: 'colombia', name: 'Colombia', emoji: '🇨🇴', color: '#dc2626',
-    rep: 20, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.3, heroin: 0.8, bluesky: 0.6, opioids: 0.5 }, gangId: 'car',
-    law: COLOMBIA_LAW, customsStrictness: 0.15, contraband: ['heroin', 'opioids'],
+    rep: 20, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.55, heroin: 0.8, bluesky: 0.6, opioids: 0.5 }, gangId: 'car',
+    law: COLOMBIA_LAW, customsStrictness: 0.30, contraband: ['heroin', 'opioids'],
   },
   {
     id: 'netherlands', name: 'Netherlands', emoji: '🇳🇱', color: '#f97316',
-    rep: 50, flyCost: 5000, travelDays: 2, priceMultipliers: { ecstasy: 0.35, weed: 0.4, acid: 0.5, ozempic: 0.5 }, gangId: 'pen',
+    rep: 50, flyCost: 5000, travelDays: 2, priceMultipliers: { ecstasy: 0.55, weed: 0.5, acid: 0.55, ozempic: 0.55 }, gangId: 'pen',
     law: NETHERLANDS_LAW, customsStrictness: 0.25, contraband: ['ecstasy', 'weed', 'acid', 'ozempic'],
   },
   {
     id: 'thailand', name: 'Thailand', emoji: '🇹🇭', color: '#14b8a6',
-    rep: 40, flyCost: 4000, travelDays: 2, priceMultipliers: { heroin: 0.3, speed: 0.35, opioids: 0.35, bluesky: 0.55 }, gangId: 'jao',
-    law: THAILAND_LAW, customsStrictness: 0.30, contraband: ['heroin', 'speed', 'bluesky', 'opioids'],
+    rep: 40, flyCost: 4000, travelDays: 2, priceMultipliers: { heroin: 0.5, speed: 0.45, opioids: 0.45, bluesky: 0.55 }, gangId: 'jao',
+    law: THAILAND_LAW, customsStrictness: 0.40, contraband: ['heroin', 'speed', 'bluesky', 'opioids'],
   },
   {
     id: 'france', name: 'France', emoji: '🇫🇷', color: '#6366f1',
-    rep: 60, flyCost: 4500, travelDays: 2, priceMultipliers: { heroin: 0.45, cocaine: 0.65, ozempic: 0.4 }, gangId: 'cor',
+    rep: 60, flyCost: 4500, travelDays: 2, priceMultipliers: { heroin: 0.55, cocaine: 0.65, ozempic: 0.55 }, gangId: 'cor',
     law: FRANCE_LAW, customsStrictness: 0.40, contraband: ['cocaine', 'heroin', 'ozempic'],
   },
 ];
@@ -226,66 +226,67 @@ export const RANKS: Rank[] = [
 ];
 
 // ── MARKET EVENTS (~30 region-tagged) ─────────────────────
+// Spike cap: 3.5x | Crash floor: 0.3x (rebalanced from 4-7x / 0.15-0.25x)
 export const EVENTS: MarketEvent[] = [
   // ── Global (null regionId = fires anywhere) ──
-  { message: 'Cops busted a shipment! Prices skyrocketed!', drugId: 'cocaine', multiplier: 4, type: 'spike', regionId: null },
+  { message: 'Cops busted a shipment! Prices skyrocketed!', drugId: 'cocaine', multiplier: 3.5, type: 'spike', regionId: null },
   { message: 'Cheap heroin flooding in from overseas!', drugId: 'heroin', multiplier: 0.35, type: 'crash', regionId: null },
-  { message: 'Acid factory raided! Prices soaring!', drugId: 'acid', multiplier: 4, type: 'spike', regionId: null },
-  { message: 'Market flooded with cheap acid!', drugId: 'acid', multiplier: 0.25, type: 'crash', regionId: null },
-  { message: 'Weed drought — prices skyrocketed!', drugId: 'weed', multiplier: 3.5, type: 'spike', regionId: null },
-  { message: 'Dealers dumping weed everywhere!', drugId: 'weed', multiplier: 0.25, type: 'crash', regionId: null },
-  { message: 'Jordan Belfort cleaned out the Quaalude supply!', drugId: 'ludes', multiplier: 6, type: 'spike', regionId: null },
-  { message: 'Warehouse of Quaaludes found! Prices crashing!', drugId: 'ludes', multiplier: 0.15, type: 'crash', regionId: null },
+  { message: 'Acid factory raided! Prices soaring!', drugId: 'acid', multiplier: 3.5, type: 'spike', regionId: null },
+  { message: 'Market flooded with cheap acid!', drugId: 'acid', multiplier: 0.3, type: 'crash', regionId: null },
+  { message: 'Weed drought — prices skyrocketed!', drugId: 'weed', multiplier: 3, type: 'spike', regionId: null },
+  { message: 'Dealers dumping weed everywhere!', drugId: 'weed', multiplier: 0.3, type: 'crash', regionId: null },
+  { message: 'Jordan Belfort cleaned out the Quaalude supply!', drugId: 'ludes', multiplier: 3.5, type: 'spike', regionId: null },
+  { message: 'Warehouse of Quaaludes found! Prices crashing!', drugId: 'ludes', multiplier: 0.3, type: 'crash', regionId: null },
 
   // ── NYC ──
-  { message: 'DEA raid in the Bronx! Heroin supply dried up!', drugId: 'heroin', multiplier: 4, type: 'spike', regionId: 'nyc' },
-  { message: 'Wall Street party weekend — cocaine demand insane!', drugId: 'cocaine', multiplier: 6, type: 'spike', regionId: 'nyc' },
-  { message: 'Junkies desperate in the subway — heroin prices insane!', drugId: 'heroin', multiplier: 7, type: 'spike', regionId: 'nyc' },
+  { message: 'DEA raid in the Bronx! Heroin supply dried up!', drugId: 'heroin', multiplier: 3.5, type: 'spike', regionId: 'nyc' },
+  { message: 'Wall Street party weekend — cocaine demand insane!', drugId: 'cocaine', multiplier: 3.5, type: 'spike', regionId: 'nyc' },
+  { message: 'Junkies desperate in the subway — heroin prices insane!', drugId: 'heroin', multiplier: 3.5, type: 'spike', regionId: 'nyc' },
   { message: 'Colombian shipment arrives in NYC!', drugId: 'cocaine', multiplier: 0.3, type: 'crash', regionId: 'nyc' },
   { message: 'Dutch ecstasy floods the US market!', drugId: 'ecstasy', multiplier: 0.3, type: 'crash', regionId: 'nyc' },
-  { message: 'Speed addicts paying premium in Brooklyn!', drugId: 'speed', multiplier: 5, type: 'spike', regionId: 'nyc' },
+  { message: 'Speed addicts paying premium in Brooklyn!', drugId: 'speed', multiplier: 3.5, type: 'spike', regionId: 'nyc' },
 
   // ── Colombia ──
-  { message: 'Cartel lab discovered — cocaine flooding streets!', drugId: 'cocaine', multiplier: 0.2, type: 'crash', regionId: 'colombia' },
-  { message: 'Government airstrike on coca fields!', drugId: 'cocaine', multiplier: 5, type: 'spike', regionId: 'colombia' },
-  { message: 'Rival cartel war — supply cut off!', drugId: 'cocaine', multiplier: 4, type: 'spike', regionId: 'colombia' },
-  { message: 'New coca harvest — prices plummeting!', drugId: 'cocaine', multiplier: 0.25, type: 'crash', regionId: 'colombia' },
+  { message: 'Cartel lab discovered — cocaine flooding streets!', drugId: 'cocaine', multiplier: 0.3, type: 'crash', regionId: 'colombia' },
+  { message: 'Government airstrike on coca fields!', drugId: 'cocaine', multiplier: 3.5, type: 'spike', regionId: 'colombia' },
+  { message: 'Rival cartel war — supply cut off!', drugId: 'cocaine', multiplier: 3, type: 'spike', regionId: 'colombia' },
+  { message: 'New coca harvest — prices plummeting!', drugId: 'cocaine', multiplier: 0.3, type: 'crash', regionId: 'colombia' },
 
   // ── Netherlands ──
-  { message: 'Rave festival in Amsterdam — ecstasy demand insane!', drugId: 'ecstasy', multiplier: 5, type: 'spike', regionId: 'netherlands' },
-  { message: 'Coffee shop surplus — weed dirt cheap!', drugId: 'weed', multiplier: 0.2, type: 'crash', regionId: 'netherlands' },
-  { message: 'Dutch lab bust — ecstasy prices soaring!', drugId: 'ecstasy', multiplier: 4, type: 'spike', regionId: 'netherlands' },
+  { message: 'Rave festival in Amsterdam — ecstasy demand insane!', drugId: 'ecstasy', multiplier: 3.5, type: 'spike', regionId: 'netherlands' },
+  { message: 'Coffee shop surplus — weed dirt cheap!', drugId: 'weed', multiplier: 0.3, type: 'crash', regionId: 'netherlands' },
+  { message: 'Dutch lab bust — ecstasy prices soaring!', drugId: 'ecstasy', multiplier: 3, type: 'spike', regionId: 'netherlands' },
   { message: 'Acid flooding Amsterdam clubs!', drugId: 'acid', multiplier: 0.3, type: 'crash', regionId: 'netherlands' },
 
   // ── Thailand ──
-  { message: 'Golden Triangle pipeline opened — cheap heroin!', drugId: 'heroin', multiplier: 0.25, type: 'crash', regionId: 'thailand' },
-  { message: 'Thai police crackdown on ya ba!', drugId: 'speed', multiplier: 5, type: 'spike', regionId: 'thailand' },
-  { message: 'Full moon party demand — ecstasy prices insane!', drugId: 'ecstasy', multiplier: 5, type: 'spike', regionId: 'thailand' },
+  { message: 'Golden Triangle pipeline opened — cheap heroin!', drugId: 'heroin', multiplier: 0.3, type: 'crash', regionId: 'thailand' },
+  { message: 'Thai police crackdown on ya ba!', drugId: 'speed', multiplier: 3.5, type: 'spike', regionId: 'thailand' },
+  { message: 'Full moon party demand — ecstasy prices insane!', drugId: 'ecstasy', multiplier: 3.5, type: 'spike', regionId: 'thailand' },
   { message: 'Opium surplus from the hills!', drugId: 'heroin', multiplier: 0.3, type: 'crash', regionId: 'thailand' },
 
   // ── France ──
-  { message: 'Corsican connection intercepted!', drugId: 'heroin', multiplier: 5, type: 'spike', regionId: 'france' },
-  { message: 'Marseille port smuggling ring busted!', drugId: 'cocaine', multiplier: 4, type: 'spike', regionId: 'france' },
-  { message: 'Riviera party season — cocaine demand surging!', drugId: 'cocaine', multiplier: 5, type: 'spike', regionId: 'france' },
-  { message: 'New pipeline from Morocco — cheap speed!', drugId: 'speed', multiplier: 0.2, type: 'crash', regionId: 'france' },
+  { message: 'Corsican connection intercepted!', drugId: 'heroin', multiplier: 3.5, type: 'spike', regionId: 'france' },
+  { message: 'Marseille port smuggling ring busted!', drugId: 'cocaine', multiplier: 3, type: 'spike', regionId: 'france' },
+  { message: 'Riviera party season — cocaine demand surging!', drugId: 'cocaine', multiplier: 3.5, type: 'spike', regionId: 'france' },
+  { message: 'New pipeline from Morocco — cheap speed!', drugId: 'speed', multiplier: 0.3, type: 'crash', regionId: 'france' },
 
   // ── Blue Sky ──
   { message: "A chemistry teacher's lab just flooded the market with Blue Sky!", drugId: 'bluesky', multiplier: 0.3, type: 'crash', regionId: null },
-  { message: 'DEA shut down a superlab! Blue Sky prices through the roof!', drugId: 'bluesky', multiplier: 5, type: 'spike', regionId: null },
-  { message: 'Crystal blue persuasion... Blue Sky demand insane in NYC!', drugId: 'bluesky', multiplier: 6, type: 'spike', regionId: 'nyc' },
-  { message: 'New meth pipeline from Thailand flooding the streets!', drugId: 'bluesky', multiplier: 0.25, type: 'crash', regionId: 'thailand' },
+  { message: 'DEA shut down a superlab! Blue Sky prices through the roof!', drugId: 'bluesky', multiplier: 3.5, type: 'spike', regionId: null },
+  { message: 'Crystal blue persuasion... Blue Sky demand insane in NYC!', drugId: 'bluesky', multiplier: 3.5, type: 'spike', regionId: 'nyc' },
+  { message: 'New meth pipeline from Thailand flooding the streets!', drugId: 'bluesky', multiplier: 0.3, type: 'crash', regionId: 'thailand' },
 
   // ── Opioids ──
-  { message: 'Fentanyl shortage! Street opioid prices skyrocketing!', drugId: 'opioids', multiplier: 5, type: 'spike', regionId: null },
+  { message: 'Fentanyl shortage! Street opioid prices skyrocketing!', drugId: 'opioids', multiplier: 3.5, type: 'spike', regionId: null },
   { message: 'Pharma warehouse heist! Cheap opioids everywhere!', drugId: 'opioids', multiplier: 0.3, type: 'crash', regionId: null },
-  { message: 'Border seizure failed — opioid shipment got through!', drugId: 'opioids', multiplier: 0.2, type: 'crash', regionId: 'nyc' },
-  { message: 'Crackdown on pill mills! Opioid supply dried up!', drugId: 'opioids', multiplier: 6, type: 'spike', regionId: 'nyc' },
+  { message: 'Border seizure failed — opioid shipment got through!', drugId: 'opioids', multiplier: 0.3, type: 'crash', regionId: 'nyc' },
+  { message: 'Crackdown on pill mills! Opioid supply dried up!', drugId: 'opioids', multiplier: 3.5, type: 'spike', regionId: 'nyc' },
 
   // ── Ozempic ──
-  { message: 'Hollywood awards season! Everyone wants Ozempic!', drugId: 'ozempic', multiplier: 5, type: 'spike', regionId: null },
-  { message: 'Counterfeit Ozempic flooding the black market!', drugId: 'ozempic', multiplier: 0.25, type: 'crash', regionId: null },
-  { message: 'European pharma shipment diverted — cheap Ozempic!', drugId: 'ozempic', multiplier: 0.2, type: 'crash', regionId: 'netherlands' },
-  { message: 'Influencer endorsement goes viral! Ozempic demand insane!', drugId: 'ozempic', multiplier: 6, type: 'spike', regionId: 'france' },
+  { message: 'Hollywood awards season! Everyone wants Ozempic!', drugId: 'ozempic', multiplier: 3.5, type: 'spike', regionId: null },
+  { message: 'Counterfeit Ozempic flooding the black market!', drugId: 'ozempic', multiplier: 0.3, type: 'crash', regionId: null },
+  { message: 'European pharma shipment diverted — cheap Ozempic!', drugId: 'ozempic', multiplier: 0.3, type: 'crash', regionId: 'netherlands' },
+  { message: 'Influencer endorsement goes viral! Ozempic demand insane!', drugId: 'ozempic', multiplier: 3.5, type: 'spike', regionId: 'france' },
 ];
 
 // ── RAT NAMES / TYPES ─────────────────────────────────────
@@ -505,7 +506,7 @@ export const LEVEL_CONFIGS: Record<CampaignLevel, LevelConfig> = {
     consignmentCapMultiplier: 1, gangLoanCapMultiplier: 1, territoryTributeMultiplier: 1,
     internationalRegions: [],
     gangConsignment: false, gangLoans: false, gangMissions: false, territoryPurchase: false, gangWars: false,
-    winCondition: { minNetWorth: 25000, debtFree: true },
+    winCondition: { minNetWorth: 50000, debtFree: true },
   },
   2: {
     level: 2, name: 'Join a Gang', subtitle: 'Build connections. Go international.', emoji: '🤝',
@@ -515,7 +516,7 @@ export const LEVEL_CONFIGS: Record<CampaignLevel, LevelConfig> = {
     consignmentCapMultiplier: 1, gangLoanCapMultiplier: 1, territoryTributeMultiplier: 1,
     internationalRegions: ['colombia', 'thailand'],
     gangConsignment: true, gangLoans: true, gangMissions: true, territoryPurchase: true, gangWars: false,
-    winCondition: { minNetWorth: 75000, debtFree: false, bloodBrother: true, minTerritories: 2 },
+    winCondition: { minNetWorth: 250000, debtFree: false, bloodBrother: true, minTerritories: 2 },
   },
   3: {
     level: 3, name: 'Gang Takeover', subtitle: 'Dominate the empire. Crush the competition.', emoji: '👑',

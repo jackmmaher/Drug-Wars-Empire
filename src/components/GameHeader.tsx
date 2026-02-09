@@ -1,11 +1,13 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, DAYS, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, PERSONAS, getRank, getRegionForLocation, getRegion, DAYS_PER_LEVEL } from '../constants/game';
+import { $, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, PERSONAS, getRank, getRegionForLocation, getRegion, DAYS_PER_LEVEL, DEBT_INTEREST, BANK_INTEREST, LEVEL_CONFIGS, FAVOR_BLOOD } from '../constants/game';
 import { inventoryCount, netWorth, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
 import { MiniStat } from './MiniStat';
+import { StatusIcon } from './StatusIcon';
+import type { CampaignLevel } from '../types/game';
 
 export function GameHeader() {
   const { colors, mode, toggleTheme } = useTheme();
@@ -29,6 +31,7 @@ export function GameHeader() {
   const persona = cp.personaId ? PERSONAS.find(p => p.id === cp.personaId) : null;
   const loanGang = cp.gangLoan ? GANGS.find(g => g.id === cp.gangLoan!.gangId) : null;
   const missionGang = cp.gangMission ? GANGS.find(g => g.id === cp.gangMission!.gangId) : null;
+  const terrCount = Object.keys(cp.territories).length;
 
   return (
     <View>
@@ -41,10 +44,12 @@ export function GameHeader() {
               DAY {Math.min(cp.day, daysLimit)}/{daysLimit}
             </Text>
             <Text style={{ fontSize: 28, fontWeight: '900', color: colors.white, lineHeight: 34 }}>{$(cp.cash)}</Text>
+            <Text style={{ fontSize: 11, color: colors.textDark }}>Cash on hand</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={{ fontSize: 13, color: colors.textMuted }}>{rank.emoji} {rank.name.toUpperCase()}</Text>
             <Text style={{ fontSize: 20, fontWeight: '800', color: nw > 0 ? colors.green : colors.red }}>{$(nw)}</Text>
+            <Text style={{ fontSize: 11, color: colors.textDark }}>Net worth</Text>
           </View>
         </View>
 
@@ -59,7 +64,7 @@ export function GameHeader() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
             <Text style={{ fontSize: 13, fontWeight: '700', color: colors.red }}>{'\u26A0'} Debt compounding!</Text>
             {cp.day < daysLimit && (
-              <Text style={{ fontSize: 13, color: colors.textMuted }}>{'\u2192'} ~{$(Math.round(cp.debt * Math.pow(1.1, daysLimit - cp.day)))} by D{daysLimit}</Text>
+              <Text style={{ fontSize: 13, color: colors.textMuted }}>{'\u2192'} ~{$(Math.round(cp.debt * Math.pow(1 + DEBT_INTEREST, daysLimit - cp.day)))} by D{daysLimit}</Text>
             )}
           </View>
         )}
@@ -79,38 +84,53 @@ export function GameHeader() {
           </Text>
         )}
 
-        {/* Progress bar */}
+        {/* Day progress bar */}
         <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
           <View style={[
             { height: '100%', width: `${Math.min(cp.day / daysLimit * 100, 100)}%` },
             cp.day > daysLimit - 5 ? { backgroundColor: colors.red } : { backgroundColor: colors.blue },
           ]} />
         </View>
+
+        {/* Campaign milestone bar */}
+        {gameMode === 'campaign' && (
+          <MilestoneBar level={campaign.level as CampaignLevel} player={cp} campaign={campaign} colors={colors} />
+        )}
       </View>
 
       {/* Location */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 16 }}>
         <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: loc?.color }} />
-        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>
+        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text, flex: 1 }} numberOfLines={1}>
           {isAbroad ? `${region.emoji} ${region.name} > ` : ''}{loc?.emoji} {loc?.name}
         </Text>
         {cp.territories[cp.location] && (
-          <Text style={{ fontSize: 13, color: colors.green, fontWeight: '600' }}>+{$(cp.territories[cp.location].tribute)}/d</Text>
+          <Text style={{ fontSize: 12, color: colors.green, fontWeight: '600' }}>+{$(cp.territories[cp.location].tribute)}/d</Text>
         )}
-        <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          {persona && <Text style={{ fontSize: 16 }}>{persona.emoji}</Text>}
-          {cp.gun && <Text style={{ fontSize: 16 }}>🔫</Text>}
-          {cp.rat.hired && cp.rat.alive && <Text style={{ fontSize: 16 }}>🐀</Text>}
-          {Object.keys(cp.territories).length > 0 && (
-            <Text style={{ fontSize: 14 }}>{Object.keys(cp.territories).length}🏴</Text>
+        <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          {persona && (
+            <StatusIcon icon={persona.emoji} value="" label={persona.name.split(' ').pop() || ''} color={colors.textDim} />
+          )}
+          {cp.gun && (
+            <StatusIcon icon="🔫" value="" label="Armed" color={colors.green}
+              helpText="Improves fight odds (+20%) and run chance (+17%). Lost if fingers drop to 4." />
+          )}
+          {cp.rat.hired && cp.rat.alive && (
+            <StatusIcon icon="🐀" value="" label="Intel" color={colors.purpleLight}
+              helpText={`${cp.rat.name} — Loyalty: ${cp.rat.loyalty}%. Pay to keep them loyal. Low loyalty = they flip.`} />
+          )}
+          {terrCount > 0 && (
+            <StatusIcon icon="🏴" value={terrCount} label="Turf" color={colors.green}
+              helpText={`${terrCount} territories earning ${$(cp.tributePerDay)}/day tribute.`} />
           )}
           {cp.fingers < 10 && (
-            <Text style={{
-              fontSize: 13, fontWeight: '700',
-              color: cp.fingers <= 4 ? colors.red : cp.fingers <= 6 ? colors.yellow : colors.orangeLight,
-            }}>
-              {cp.fingers}/10
-            </Text>
+            <StatusIcon
+              icon="✋"
+              value={`${cp.fingers}`}
+              label="Fingers"
+              color={cp.fingers <= 4 ? colors.red : cp.fingers <= 6 ? colors.yellow : colors.orangeLight}
+              helpText={`${cp.fingers}/10 fingers. Lost: -${(10 - cp.fingers) * 5} space, -${(10 - cp.fingers) * 3}% sell.${cp.fingers <= 6 ? ' +1 travel day.' : ''}${cp.fingers <= 4 ? ' Can\'t hold a gun.' : ''}`}
+            />
           )}
           {/* Theme toggle */}
           <TouchableOpacity onPress={toggleTheme} style={{
@@ -189,7 +209,7 @@ export function GameHeader() {
             <Text style={{ fontSize: 14, color: colors.textDim, lineHeight: 20 }}>Buy low, sell high. Travel between cities to find better prices. Pay off your debt before day 30.</Text>
 
             <Text style={{ fontSize: 13, fontWeight: '800', color: colors.yellow, letterSpacing: 1, marginTop: 8, marginBottom: 4 }}>BANK & SHARK</Text>
-            <Text style={{ fontSize: 14, color: colors.textDim, lineHeight: 20 }}>Visit a capital city (marked with bank/shark) to deposit cash at 5%/day interest, or borrow from the shark at 10%/day. Every region's capital has both.</Text>
+            <Text style={{ fontSize: 14, color: colors.textDim, lineHeight: 20 }}>Visit a capital city (marked with Bank/Shark) to deposit cash at {(BANK_INTEREST * 100).toFixed(1)}%/day interest, or borrow from the shark at {(DEBT_INTEREST * 100)}%/day. Every region's capital has both.</Text>
 
             <Text style={{ fontSize: 13, fontWeight: '800', color: colors.yellow, letterSpacing: 1, marginTop: 8, marginBottom: 4 }}>HEAT & COPS</Text>
             <Text style={{ fontSize: 14, color: colors.textDim, lineHeight: 20 }}>Buying and selling raises heat (max 100). High heat = more cop encounters (max 65%). Each region has different police forces with unique behaviors. Bribe, run, or fight your way out.</Text>
@@ -222,7 +242,7 @@ export function GameHeader() {
             <Text style={{ fontSize: 14, color: colors.textDim, lineHeight: 20 }}>Each lost finger: -5 inventory space, -3% sell revenue. At 6 fingers: +1 travel day. At 4: lose your gun. At 0: game over.</Text>
 
             <Text style={{ fontSize: 13, fontWeight: '800', color: colors.yellow, letterSpacing: 1, marginTop: 8, marginBottom: 4 }}>INFORMANTS</Text>
-            <Text style={{ fontSize: 14, color: colors.textDim, lineHeight: 20 }}>At 10+ rep you may meet a rat who gives price tips. Pay them to keep loyalty up -- low loyalty = they flip on you. Tips now predict future market events! Higher intel = more accurate.</Text>
+            <Text style={{ fontSize: 14, color: colors.textDim, lineHeight: 20 }}>At 10+ rep you may meet a rat who gives price tips. Pay them to keep loyalty up -- low loyalty = they flip on you. Tips predict future market events! Higher intel = more accurate.</Text>
           </ScrollView>
           <TouchableOpacity onPress={() => setSubPanel(null)} style={{
             marginTop: 8, backgroundColor: colors.bgCardHover, borderRadius: 5, paddingVertical: 8, alignItems: 'center',
@@ -269,6 +289,66 @@ export function GameHeader() {
 
       {/* Offer */}
       {cp.offer && <OfferBanner />}
+    </View>
+  );
+}
+
+// ── Campaign Milestone Bar ──────────────────────────────
+function MilestoneBar({ level, player, campaign, colors }: {
+  level: CampaignLevel;
+  player: any;
+  campaign: any;
+  colors: any;
+}) {
+  const config = LEVEL_CONFIGS[level];
+  const wc = config.winCondition;
+  const nw = netWorth(player);
+  const terrCount = Object.keys(player.territories).length;
+  const hasBloodBrother = Object.values(player.gangRelations).some((v: any) => v >= FAVOR_BLOOD);
+  const defeatedCount = campaign.gangWar?.defeatedGangs?.length || 0;
+
+  const objectives: Array<{ label: string; done: boolean }> = [];
+
+  if (wc.minNetWorth > 0) objectives.push({ label: `${$(wc.minNetWorth)} NW`, done: nw >= wc.minNetWorth });
+  if (wc.debtFree) objectives.push({ label: 'Debt Free', done: player.debt <= 0 });
+  if (wc.bloodBrother) objectives.push({ label: 'Blood Brother', done: hasBloodBrother });
+  if (wc.minTerritories) objectives.push({ label: `${wc.minTerritories} Territories`, done: terrCount >= wc.minTerritories });
+  if (wc.minRep) objectives.push({ label: 'Drug Lord', done: player.rep >= wc.minRep });
+  if (wc.defeatedGangs) objectives.push({ label: `${wc.defeatedGangs} Gangs Defeated`, done: defeatedCount >= wc.defeatedGangs });
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 6,
+      paddingVertical: 4,
+      paddingHorizontal: 2,
+    }}>
+      {objectives.map((obj, i) => (
+        <View key={i} style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 3,
+          backgroundColor: obj.done ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.03)',
+          borderRadius: 4,
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+          borderWidth: 1,
+          borderColor: obj.done ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)',
+        }}>
+          <Text style={{ fontSize: 11, color: obj.done ? colors.green : colors.textDark }}>
+            {obj.done ? '\u2713' : '\u2717'}
+          </Text>
+          <Text style={{
+            fontSize: 11,
+            fontWeight: '600',
+            color: obj.done ? colors.green : colors.textDark,
+          }}>
+            {obj.label}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }

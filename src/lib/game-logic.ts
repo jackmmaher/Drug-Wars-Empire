@@ -341,18 +341,21 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
     return { player, phase: 'playing', effects, notifications };
   }
 
-  // Inter-region flight checks
+  // Inter-region flight checks (cost scales with net worth)
+  const preFlightNW = netWorth(player);
+  const flyScale = Math.max(1, Math.floor(preFlightNW / 500_000) + 1);
   if (isInterRegion && dest.region !== 'nyc') {
     if (p.rep < destRegion.rep) {
       notifications.push({ message: `Need ${destRegion.rep} rep to unlock ${destRegion.name}.`, type: 'danger' });
       return { player, phase: 'playing', effects, notifications };
     }
-    if (p.cash < destRegion.flyCost) {
-      notifications.push({ message: `Flight costs $${destRegion.flyCost.toLocaleString()}.`, type: 'danger' });
+    const scaledCost = destRegion.flyCost * flyScale;
+    if (p.cash < scaledCost) {
+      notifications.push({ message: `Flight costs $${scaledCost.toLocaleString()}.`, type: 'danger' });
       return { player, phase: 'playing', effects, notifications };
     }
   } else if (isInterRegion && dest.region === 'nyc' && srcRegion.id !== 'nyc') {
-    const returnCost = Math.round(srcRegion.flyCost / 2);
+    const returnCost = Math.round(srcRegion.flyCost / 2 * flyScale);
     if (p.cash < returnCost) {
       notifications.push({ message: `Return flight costs $${returnCost.toLocaleString()}.`, type: 'danger' });
       return { player, phase: 'playing', effects, notifications };
@@ -364,12 +367,12 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   td += getFingerMovePenalty(p.fingers);
   p.day += td;
 
-  // Deduct flight cost
+  // Deduct flight cost (scales with net worth — known kingpins pay more)
   if (isInterRegion) {
     if (dest.region === 'nyc') {
-      p.cash -= Math.round(srcRegion.flyCost / 2);
+      p.cash -= Math.round(srcRegion.flyCost / 2 * flyScale);
     } else {
-      p.cash -= destRegion.flyCost;
+      p.cash -= destRegion.flyCost * flyScale;
     }
     p.hasGoneInternational = true;
   }
@@ -389,11 +392,16 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   p.debt = Math.round(p.debt * Math.pow(1 + DEBT_INTEREST, td));
   p.bank = Math.round(p.bank * Math.pow(1 + BANK_INTEREST, td));
 
-  // ── Heat Decay (rebalanced + persona) ──
+  // ── Heat Decay (reduced) + Wealth-scaled heat floor ──
   const mods = getPersonaModifiers(p.personaId);
-  let heatDecay = R(5, 12) + law.heatDecayBonus + mods.heatDecayBonus;
-  if (p.heat > 60) heatDecay += Math.floor((p.heat - 60) * 0.15);
+  let heatDecay = R(3, 7) + law.heatDecayBonus + mods.heatDecayBonus;
+  // No high-heat bonus — rich players shouldn't shed heat faster
   p.heat = Math.max(0, p.heat - heatDecay);
+
+  // Wealth-scaled heat floor: rich dealers attract attention
+  const nw = netWorth(p);
+  const heatFloor = Math.min(30, Math.floor(nw / 100_000) * 3);
+  if (p.heat < heatFloor) p.heat = heatFloor;
 
   // Tribute
   const trib = Object.values(p.territories).reduce((s, d) => s + (d.tribute || 0), 0);
@@ -432,7 +440,7 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
   }
 
   // ── Market (region-filtered events with rat bias + persona) ──
-  const ev = selectEvent(currentRegion.id, p.rat.pendingTip, 0.38 + mods.eventChanceBonus);
+  const ev = selectEvent(currentRegion.id, p.rat.pendingTip, 0.28 + mods.eventChanceBonus);
   p.currentEvent = ev;
   p.previousPrices = { ...p.prices };
   p.prices = generatePrices(p.location, ev, p.campaignLevel, gameMode);
@@ -663,7 +671,9 @@ export function travel(player: PlayerState, destinationId: string, campaign?: Ca
     const maxOfficers = Math.min(6, 2 + Math.floor(p.heat / 35) + law.aggressionBase);
     const count = R(1, Math.max(1, maxOfficers));
     const baseBribe = R(300, 1000);
-    const bribeCost = Math.round(baseBribe * law.bribeMultiplier);
+    // Bribe cost scales logarithmically with wealth
+    const wealthBribeScale = Math.max(1, Math.log10(Math.max(1, netWorth(p)) / 10_000));
+    const bribeCost = Math.round(baseBribe * law.bribeMultiplier * wealthBribeScale);
     p.cops = { count, bribeCost, regionLaw: law };
     effects.push({ type: 'haptic', style: 'heavy' });
     return { player: p, phase: 'cop', effects, notifications };
@@ -765,9 +775,9 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
     const prevQty = player.inventory[drug.id] || 0;
     const prevAvg = player.averageCosts[drug.id] || 0;
     p.averageCosts = { ...p.averageCosts, [drug.id]: (prevAvg * prevQty + price * q) / (prevQty + q) };
-    // Rebalanced buy heat: ceil(qty * price / 25000) capped at 8 + persona
+    // Buy heat: ceil(qty * price / 15000) capped at 15 + persona
     const bMods = getPersonaModifiers(p.personaId);
-    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(8, Math.ceil(q * price / 25000)) * bMods.heatGainMultiplier));
+    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(15, Math.ceil(q * price / 15000)) * bMods.heatGainMultiplier));
     p.trades++;
     effects.push({ type: 'sfx', sound: 'buy' }, { type: 'haptic', style: 'light' });
   } else {
@@ -825,8 +835,8 @@ export function executeTrade(player: PlayerState, drugId: string, tradeType: 'bu
       effects.push({ type: 'sfx', sound: 'miss' }, { type: 'haptic', style: 'warning' });
     }
     p.trades++;
-    // Rebalanced sell heat: ceil(rev / 30000) capped at 6 + persona
-    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(6, Math.ceil(rev / 30000)) * tMods.heatGainMultiplier));
+    // Sell heat: ceil(rev / 20000) capped at 12 + persona
+    p.heat = Math.min(HEAT_CAP, p.heat + Math.round(Math.min(12, Math.ceil(rev / 20000)) * tMods.heatGainMultiplier));
   }
 
   const { milestones, newMilestone } = checkMilestones(p);
