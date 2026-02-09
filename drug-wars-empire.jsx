@@ -1,19 +1,19 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 /*
 ══════════════════════════════════════════════════════════════
   DRUG WARS: EMPIRE — NEUROCHEMICAL EDITION
-
+  
   DOPAMINE: Variable-ratio rewards, near-misses, streaks,
             price spikes you ALMOST caught, escalating multipliers,
             "just one more turn" compulsion loops
-
+            
   SEROTONIN: Territory ownership, reputation rank progression,
              tribute income, status symbols, milestone collection
-
+             
   OXYTOCIN: Informant relationship/loyalty, gang alliances,
             2P shared-screen betrayal tension, protecting your rat
-
+            
   ENDORPHIN: Screen shake, close escapes, health-danger zone,
              cop shootouts, near-death survival, loss aversion
 ══════════════════════════════════════════════════════════════
@@ -118,7 +118,7 @@ const MILES = [
   {id:"intl",cond:s=>s.intl,m:"International",e:"✈️"},
   {id:"gun",cond:s=>s.gun,m:"Armed",e:"🔫"},
   {id:"big",cond:s=>s.best>=50000,m:"Big Score",e:"💥"},
-  {id:"rat",cond:s=>s.rat&&s.rat.hired,m:"Connected",e:"🐀"},
+  {id:"rat",cond:s=>s.rat.hired,m:"Connected",e:"🐀"},
 ];
 
 function getRank(rep) { let r=RANKS[0]; for(const x of RANKS) if(rep>=x.r) r=x; return r; }
@@ -147,7 +147,7 @@ function init(mode="solo") {
     avg:{},terr:{},gang:{col:0,tri:0,bra:0,car:0},
     rat:mkRat(),ev:ev,evs:ev?[{d:1,m:ev.m,t:ev.t}]:[],
     nms:[],offer:null,cops:null,trib:0,intl:false,
-    close:0,miles:[],newMile:null,recentSold:[],
+    close:0,miles:[],newMile:null,
   });
   if(mode==="2p") return {mode:"2p",phase:"title",turn:1,p1:{...base(),nm:"Player 1",pc:"#ef4444"},p2:{...base(),nm:"Player 2",pc:"#3b82f6",loc:"brooklyn",prices:genP("brooklyn",null)}};
   return {mode:"solo",phase:"title",...base()};
@@ -160,7 +160,6 @@ export default function App() {
   const [gs,sGs] = useState(()=>init());
   const [ui,sUi] = useState({tr:null,tq:"",tab:"market",shk:false,sub:null,nots:[]});
   const nt = useRef(null);
-  const sfxQueue = useRef([]);
 
   const cp = gs.mode==="2p" ? (gs.turn===1?gs.p1:gs.p2) : gs;
   const scp = fn => {
@@ -183,13 +182,6 @@ export default function App() {
   },[]);
   const shake = useCallback(()=>{ sUi(u=>({...u,shk:true})); setTimeout(()=>sUi(u=>({...u,shk:false})),500); },[]);
 
-  // Play queued SFX after state update (avoids side effects in updaters)
-  function flushSfx() {
-    const q = sfxQueue.current;
-    sfxQueue.current = [];
-    q.forEach(fn => fn());
-  }
-
   function chkMiles(s) {
     const ms=[...(s.miles||[])]; let nm=null;
     for(const m of MILES){if(m.cond(s)&&!ms.includes(m.id)){ms.push(m.id);nm=m;}}
@@ -205,8 +197,6 @@ export default function App() {
       if(cp.rep<dest.rep){notify(`Need ${dest.rep} rep to unlock ${dest.name}.`,"danger");return;}
       if(cp.cash<dest.fly){notify(`Flight costs ${$(dest.fly)}.`,"danger");return;}
     }
-    let pendingShake = false;
-    let pendingSfx = [];
     sGs(prev => {
       const p = prev.mode==="2p" ? {...prev[prev.turn===1?"p1":"p2"]} : {...prev};
       const td = dest.td||1;
@@ -231,7 +221,7 @@ export default function App() {
       }
       p.nms=nms;
       // SOLD-TOO-EARLY near miss (even more painful dopamine)
-      if(p.recentSold && p.recentSold.length > 0){
+      if(p.recentSold){
         for(const rs of p.recentSold){
           const now=p.prices[rs.id];
           if(now&&now>rs.price*2) nms.push({drug:DRUGS.find(x=>x.id===rs.id),pr:rs.price,now,q:rs.qty,miss:rs.qty*(now-rs.price),type:"sold_early"});
@@ -242,8 +232,7 @@ export default function App() {
       const lg=GANGS.find(g=>g.turf.includes(lid));
       if(lg&&!p.terr[lid]&&p.gang[lg.id]<-15&&C(0.3)){
         const tax=Math.round(p.cash*R(5,18)/100);p.cash-=tax;
-        p.evs=[...p.evs,{d:p.day,m:`${lg.e} ${lg.name} taxed you ${$(tax)}!`,t:"danger"}];
-        pendingShake=true;
+        p.evs=[...p.evs,{d:p.day,m:`${lg.e} ${lg.name} taxed you ${$(tax)}!`,t:"danger"}];shake();
       }
       // Rat
       if(p.rat.hired&&p.rat.alive){
@@ -251,24 +240,22 @@ export default function App() {
         if(p.rat.loy<20&&C(0.03+(50-p.rat.loy)/400)){
           p.rat={...p.rat,alive:false};p.heat+=40;
           p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name} RATTED YOU OUT! Heat surging!`,t:"danger"}];
-          pendingShake=true;
-          pendingSfx.push(()=>SFX.bad());
+          shake();SFX.bad();
         } else if(C(0.22+p.rat.intel*0.07)){
           const td2=DRUGS[R(0,DRUGS.length-1)];const tt=C(0.5)?"spike":"crash";
           p.rat={...p.rat,tips:p.rat.tips+1};
           p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name}: "${td2.name} gonna ${tt==="spike"?"explode":"crash"} soon..."`,t:"tip"}];
         }
       }
-      // Cops — use fresh inventory count, not stale closure
-      const curUsed = Object.values(p.inv).reduce((a,b)=>a+b,0);
+      // Cops
       const cc=0.12+p.heat/350+(dest.r==="intl"?0.1:0);
-      if(C(cc)&&curUsed>0){
+      if(C(cc)&&used>0){
         p.cops={n:R(1,2+Math.floor(p.heat/30)),br:R(400,1500)};
         if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"cop"};
         return{...prev,...p,phase:"cop"};
       }
       // Mugging
-      if(C(0.07)){const s=Math.round(p.cash*R(8,28)/100);p.cash-=s;p.evs=[...p.evs,{d:p.day,m:`Mugged! Lost ${$(s)}!`,t:"danger"}];pendingShake=true;}
+      if(C(0.07)){const s=Math.round(p.cash*R(8,28)/100);p.cash-=s;p.evs=[...p.evs,{d:p.day,m:`Mugged! Lost ${$(s)}!`,t:"danger"}];shake();}
       // Offers
       p.offer=null;
       if(!p.gun&&C(0.14)) p.offer={type:"gun",price:R(300,600)};
@@ -289,9 +276,6 @@ export default function App() {
       if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"playing"};
       return{...prev,...p,phase:"playing"};
     });
-    // Fire side effects after state update
-    if(pendingShake) shake();
-    pendingSfx.forEach(fn => fn());
   }
 
   // ── TRADE ────────────────────────────────────────────────
@@ -299,7 +283,6 @@ export default function App() {
     const{tr,tq}=ui; if(!tr)return;
     const drug=DRUGS.find(d=>d.id===tr.did);
     const price=cp.prices[drug.id]; if(!price)return;
-    let pendingSfx = null;
     sGs(prev=>{
       const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
       const u=Object.values(p.inv).reduce((a,b)=>a+b,0);
@@ -313,44 +296,38 @@ export default function App() {
         const pq=prev.mode==="2p"?(prev[prev.turn===1?"p1":"p2"].inv[drug.id]||0):(prev.inv[drug.id]||0);
         const pa=prev.mode==="2p"?(prev[prev.turn===1?"p1":"p2"].avg[drug.id]||0):(prev.avg[drug.id]||0);
         p.avg={...p.avg,[drug.id]:(pa*pq+price*q)/(pq+q)};
-        p.heat+=Math.ceil(q*price/12000);p.trades++;
-        pendingSfx = ()=>SFX.buy();
+        p.heat+=Math.ceil(q*price/12000);p.trades++;SFX.buy();
       } else {
         const own=p.inv[drug.id]||0;
         const q=Math.min(tq==="max"?99999:parseInt(tq)||0,own);
         if(q<=0)return prev;
         const rev=q*price;const ab=p.avg[drug.id]||price;
         const pnl=rev-q*ab;
-        p.cash+=rev;
-        const newInv={...p.inv,[drug.id]:own-q};
-        if(newInv[drug.id]<=0){delete newInv[drug.id];const na={...p.avg};delete na[drug.id];p.avg=na;}
-        p.inv=newInv;
+        p.cash+=rev;p.inv={...p.inv,[drug.id]:own-q};
+        if(p.inv[drug.id]<=0){delete p.inv[drug.id];const na={...p.avg};delete na[drug.id];p.avg=na;}
         p.profit+=pnl;if(pnl>p.best)p.best=pnl;
         // Track for near-miss (sold-too-early dopamine pain)
         p.recentSold=[...(p.recentSold||[]),{id:drug.id,price,qty:q}];
         if(pnl>0){
           p.strk++;if(p.strk>p.mstrk)p.mstrk=p.strk;
-          p.combo=Math.min(5,1+p.strk*0.15);
-          p.rep+=Math.ceil((pnl/4000)*p.combo);
+          p.combo=Math.min(5,1+p.strk*0.15);p.rep+=Math.ceil(pnl/4000);
           const g=GANGS.find(x=>x.turf.includes(p.loc));
           if(g)p.gang={...p.gang,[g.id]:p.gang[g.id]+1};
-          pendingSfx = pnl>5000 ? ()=>SFX.big() : ()=>SFX.sell();
-        }else{p.strk=0;p.combo=1;pendingSfx=()=>SFX.miss();}
+          if(pnl>5000)SFX.big();else SFX.sell();
+        }else{p.strk=0;p.combo=1;SFX.miss();}
         p.trades++;p.heat+=Math.ceil(rev/15000);
       }
       const{miles,newMile}=chkMiles(p);p.miles=miles;p.newMile=newMile;
-      if(newMile) pendingSfx=()=>SFX.lvl();
+      if(newMile)SFX.lvl();
       if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p};
       return{...prev,...p};
     });
-    if(pendingSfx) pendingSfx();
     sUi(u=>({...u,tr:null,tq:""}));
   }
 
   // ── COP ──────────────────────────────────────────────────
   function copAct(a) {
     SFX.bad();
-    let pendingShake = false;
     sGs(prev=>{
       const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
       const c=p.cops;
@@ -359,19 +336,13 @@ export default function App() {
           p.evs=[...p.evs,{d:p.day,m:"Escaped! Heart pounding!",t:"info"}];p.close++;p.heat+=12;
         }else{
           const l=Math.round(p.cash*0.2);p.cash-=l;
-          const dk=Object.keys(p.inv);
-          if(dk.length){
-            const k=dk[R(0,dk.length-1)];const lq=Math.ceil(p.inv[k]*R(30,60)/100);
-            const newInv={...p.inv,[k]:p.inv[k]-lq};
-            if(newInv[k]<=0) delete newInv[k];
-            p.inv=newInv;
-          }
-          p.hp-=R(5,18);p.heat+=18;p.close++;pendingShake=true;
+          const dk=Object.keys(p.inv);if(dk.length){const k=dk[R(0,dk.length-1)];const lq=Math.ceil(p.inv[k]*R(30,60)/100);p.inv={...p.inv,[k]:p.inv[k]-lq};if(p.inv[k]<=0)delete p.inv[k];}
+          p.hp-=R(5,18);p.heat+=18;p.close++;shake();
           p.evs=[...p.evs,{d:p.day,m:`Caught! Lost ${$(l)} and product.`,t:"danger"}];
         }
       }else if(a==="fight"){
         let kl=0,dm=0;for(let i=0;i<c.n;i++){if(C(p.gun?0.45:0.15))kl++;else dm+=R(p.gun?5:12,p.gun?15:30);}
-        p.hp-=dm;p.heat+=25+kl*12;p.rep+=kl*8;p.close++;pendingShake=true;
+        p.hp-=dm;p.heat+=25+kl*12;p.rep+=kl*8;p.close++;shake();
         p.evs=[...p.evs,{d:p.day,m:`Shootout! ${kl}/${c.n} down.${dm>20?" Hurt bad.":""}`,t:"danger"}];
       }else{
         const amt=c.br*c.n;if(p.cash>=amt){p.cash-=amt;p.heat-=8;p.evs=[...p.evs,{d:p.day,m:`Bribed cops for ${$(amt)}.`,t:"info"}];}
@@ -382,30 +353,27 @@ export default function App() {
       if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"playing"};
       return{...prev,...p,phase:"playing"};
     });
-    if(pendingShake) shake();
   }
 
   // ── OFFER ────────────────────────────────────────────────
   function offer(ok) {
-    let pendingSfx = null;
     sGs(prev=>{
       const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
       if(!ok){p.offer=null;if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p};return{...prev,...p};}
       const o=p.offer;
-      if(o.type==="gun"&&p.cash>=o.price){p.cash-=o.price;p.gun=true;pendingSfx=()=>SFX.buy();}
-      else if(o.type==="coat"&&p.cash>=o.price){p.cash-=o.price;p.spc+=o.sp;pendingSfx=()=>SFX.buy();}
-      else if(o.type==="rat"&&p.cash>=o.rat.cost){p.cash-=o.rat.cost;p.rat={...o.rat,hired:true};pendingSfx=()=>SFX.buy();p.evs=[...p.evs,{d:p.day,m:`🐀 Hired ${o.rat.name}.`,t:"info"}];}
-      else if(o.type==="terr"&&p.cash>=o.cost){p.cash-=o.cost;p.terr={...p.terr,[o.lid]:{tr:o.tr,d:p.day}};p.rep+=15;pendingSfx=()=>SFX.lvl();p.evs=[...p.evs,{d:p.day,m:`🏴 Claimed ${LOCS.find(l=>l.id===o.lid)?.name}! +${$(o.tr)}/day`,t:"info"}];}
+      if(o.type==="gun"&&p.cash>=o.price){p.cash-=o.price;p.gun=true;SFX.buy();}
+      else if(o.type==="coat"&&p.cash>=o.price){p.cash-=o.price;p.spc+=o.sp;SFX.buy();}
+      else if(o.type==="rat"){p.cash-=o.rat.cost;p.rat={...o.rat,hired:true};SFX.buy();p.evs=[...p.evs,{d:p.day,m:`🐀 Hired ${o.rat.name}.`,t:"info"}];}
+      else if(o.type==="terr"&&p.cash>=o.cost){p.cash-=o.cost;p.terr={...p.terr,[o.lid]:{tr:o.tr,d:p.day}};p.rep+=15;SFX.lvl();p.evs=[...p.evs,{d:p.day,m:`🏴 Claimed ${LOCS.find(l=>l.id===o.lid)?.name}! +${$(o.tr)}/day`,t:"info"}];}
       p.offer=null;const{miles}=chkMiles(p);p.miles=miles;
       if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p};
       return{...prev,...p};
     });
-    if(pendingSfx) pendingSfx();
   }
 
   function bk(t,a){scp(p=>{const v=a==="all"?(t==="dep"?p.cash:p.bank):Math.max(0,parseInt(a)||0);if(t==="dep"){const x=Math.min(v,p.cash);return{cash:p.cash-x,bank:p.bank+x};}else{const x=Math.min(v,p.bank);return{cash:p.cash+x,bank:p.bank-x};}});}
-  function sk(a){scp(p=>{const v=a==="all"?Math.min(p.cash,p.debt):Math.min(parseInt(a)||0,p.cash,p.debt);const updated={...p,cash:p.cash-v,debt:p.debt-v};const{miles}=chkMiles(updated);return{cash:updated.cash,debt:updated.debt,miles};});}
-  function payRat(){scp(p=>{if(p.cash<150||!p.rat.hired||!p.rat.alive)return{};return{cash:p.cash-150,rat:{...p.rat,loy:Math.min(100,p.rat.loy+R(5,12))}};}); notify("Loyalty boosted.","info");}
+  function sk(a){scp(p=>{const v=a==="all"?Math.min(p.cash,p.debt):Math.min(parseInt(a)||0,p.cash,p.debt);const r={cash:p.cash-v,debt:p.debt-v};const{miles}=chkMiles({...p,...r});return{...r,miles};});}
+  function payRat(){scp(p=>{if(p.cash<150)return{};return{cash:p.cash-150,rat:{...p.rat,loy:Math.min(100,p.rat.loy+R(5,12))}};}); notify("Loyalty boosted.","info");}
 
   // ════════════════════════════════════════════════════════
   // RENDER
@@ -504,7 +472,6 @@ export default function App() {
     const q=ui.tq==="max"?mq:Math.min(parseInt(ui.tq)||0,mq);
     const tot=q*(price||0);const ab=cp.avg[drug.id];
     const pnl=!ib&&ab?q*(price-ab):0;const pp=!ib&&ab?((price-ab)/ab*100):0;
-    const handleTradeKey = (e) => { if(e.key==="Enter"&&q>0) doTrade(); if(e.key==="Escape") sUi(u=>({...u,tr:null,tq:""})); };
     return(
       <div style={Z.root}><style>{CSS}</style>
         <div style={Z.ctr}>
@@ -513,7 +480,7 @@ export default function App() {
           <div style={{color:"#94a3b8",fontSize:13}}>{$(price)} each</div>
           {!ib&&ab&&<div style={{fontSize:22,fontWeight:900,color:pp>0?"#22c55e":"#ef4444",margin:"4px 0"}}>{pp>0?"+":""}{pp.toFixed(0)}% {pp>80?"🔥":pp>150?"💥":""}</div>}
           <div style={{color:"#475569",fontSize:11,marginBottom:10}}>{ib?`Max ${mb}`:`Own ${own}`} {cp.strk>1&&!ib?`• ${cp.strk}x streak`:""}</div>
-          <input type="text" value={ui.tq} autoFocus onChange={e=>sUi(u=>({...u,tq:e.target.value}))} onKeyDown={handleTradeKey} placeholder="Qty..." style={Z.inp}/>
+          <input type="text" value={ui.tq} autoFocus onChange={e=>sUi(u=>({...u,tq:e.target.value}))} placeholder="Qty..." style={Z.inp}/>
           <div style={{display:"flex",gap:4,margin:"8px 0",justifyContent:"center",flexWrap:"wrap"}}>
             {[1,5,10,25,50].filter(n=>n<=mq).map(n=><button key={n} onClick={()=>sUi(u=>({...u,tq:String(n)}))} style={Z.qb}>{n}</button>)}
             {mq>2&&<button onClick={()=>sUi(u=>({...u,tq:String(Math.floor(mq/2))}))} style={Z.qb}>½</button>}
@@ -546,7 +513,7 @@ export default function App() {
         <div style={Z.hdr}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
-              <div style={{fontSize:8,color:"#334155",letterSpacing:2}}>DAY {Math.min(cp.day,DAYS)}/{DAYS}</div>
+              <div style={{fontSize:8,color:"#334155",letterSpacing:2}}>DAY {cp.day}/{DAYS}</div>
               <div style={{fontSize:22,fontWeight:900,color:"#f8fafc",lineHeight:1}}>{$(cp.cash)}</div>
             </div>
             <div style={{textAlign:"right"}}>
@@ -565,7 +532,7 @@ export default function App() {
           {cp.strk>1&&<div style={{textAlign:"center",fontSize:10,color:"#f59e0b",fontWeight:700,margin:"2px 0",animation:"pulse 1.5s infinite"}}>🔥 {cp.strk}x STREAK {cp.combo>1.5?"— rep bonus!":""}</div>}
           {cp.newMile&&<div style={{textAlign:"center",fontSize:11,color:"#f59e0b",fontWeight:800,animation:"pulse 1s 3"}}>🏆 MILESTONE: {cp.newMile.e} {cp.newMile.m}!</div>}
           <div style={{height:3,background:"#0f172a",borderRadius:2,overflow:"hidden",marginTop:3}}>
-            <div style={{height:"100%",width:`${Math.min(cp.day/DAYS*100,100)}%`,background:cp.day>25?"linear-gradient(90deg,#f59e0b,#ef4444)":"linear-gradient(90deg,#1e40af,#3b82f6)",transition:"width .5s"}}/>
+            <div style={{height:"100%",width:`${cp.day/DAYS*100}%`,background:cp.day>25?"linear-gradient(90deg,#f59e0b,#ef4444)":"linear-gradient(90deg,#1e40af,#3b82f6)",transition:"width .5s"}}/>
           </div>
         </div>
         {/* LOCATION */}
@@ -627,7 +594,7 @@ export default function App() {
                   <span style={{fontSize:14}}>{d.e}</span>
                   <div>
                     <div style={{fontSize:11,fontWeight:700,color:"#e2e8f0"}}>{d.name}</div>
-                    {pc!==null&&pc!==0&&<div style={{fontSize:8,color:pc>0?"#22c55e":pc<0?"#ef4444":"#334155"}}>{pc>0?"▲":"▼"}{Math.abs(pc).toFixed(0)}%</div>}
+                    {pc!==null&&<div style={{fontSize:8,color:pc>0?"#22c55e":pc<0?"#ef4444":"#334155"}}>{pc>0?"▲":"▼"}{Math.abs(pc).toFixed(0)}%</div>}
                   </div>
                   <div style={{textAlign:"right",fontSize:12,fontWeight:800,color:pr?"#f8fafc":"#1e293b"}}>{pr?$(pr):"—"}</div>
                   <div style={{textAlign:"center",fontSize:10,color:own>0?"#e2e8f0":"#1e293b"}}>{own||"—"}{pnl!==null&&own>0&&<div style={{fontSize:7,fontWeight:700,color:pnl>0?"#22c55e":"#ef4444"}}>{pnl>0?"+":""}{pnl.toFixed(0)}%</div>}</div>
@@ -744,6 +711,7 @@ const Z = {
 };
 
 const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 body{margin:0;background:#060a12}
 button:hover{filter:brightness(1.12);transform:translateY(-1px)}
