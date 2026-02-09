@@ -1,0 +1,757 @@
+import { useState, useCallback, useRef } from "react";
+
+/*
+══════════════════════════════════════════════════════════════
+  DRUG WARS: EMPIRE — NEUROCHEMICAL EDITION
+
+  DOPAMINE: Variable-ratio rewards, near-misses, streaks,
+            price spikes you ALMOST caught, escalating multipliers,
+            "just one more turn" compulsion loops
+
+  SEROTONIN: Territory ownership, reputation rank progression,
+             tribute income, status symbols, milestone collection
+
+  OXYTOCIN: Informant relationship/loyalty, gang alliances,
+            2P shared-screen betrayal tension, protecting your rat
+
+  ENDORPHIN: Screen shake, close escapes, health-danger zone,
+             cop shootouts, near-death survival, loss aversion
+══════════════════════════════════════════════════════════════
+*/
+
+// ── AUDIO ──────────────────────────────────────────────────
+const SFX = {
+  c: null,
+  i() { if (!this.c) try { this.c = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} },
+  p(f, d=0.08, t="square", v=0.05) {
+    try { this.i(); const o=this.c.createOscillator(),g=this.c.createGain(); o.type=t; o.frequency.value=f; g.gain.setValueAtTime(v,this.c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,this.c.currentTime+d); o.connect(g); g.connect(this.c.destination); o.start(); o.stop(this.c.currentTime+d); } catch(e){}
+  },
+  buy() { this.p(520,0.05); setTimeout(()=>this.p(660,0.06),50); },
+  sell() { this.p(440,0.04); setTimeout(()=>this.p(880,0.1,"sine"),40); },
+  big() { [0,70,140,210,280].forEach((d,i)=>setTimeout(()=>this.p(440+i*110,0.15,"sine",0.07),d)); },
+  bad() { this.p(180,0.2,"sawtooth",0.07); },
+  miss() { this.p(300,0.08); setTimeout(()=>this.p(220,0.12),80); },
+  lvl() { [0,90,180].forEach((d,i)=>setTimeout(()=>this.p(523+i*131,0.18,"sine",0.08),d)); },
+  tick() { this.p(1200,0.02,"sine",0.02); },
+};
+
+// ── CONFIG ─────────────────────────────────────────────────
+const DAYS = 30, CASH0 = 2000, DEBT0 = 5500, SPACE0 = 100;
+const DINT = 0.10, BINT = 0.05;
+const R = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const C = p => Math.random()<p;
+const $ = n => { if(n<0)return`-${$(-n)}`; if(n>=1e6)return`$${(n/1e6).toFixed(2)}M`; if(n>=1e4)return`$${(n/1e3).toFixed(1)}K`; return`$${n.toLocaleString()}`; };
+
+const DRUGS = [
+  { id:"cocaine",name:"Cocaine",e:"❄️",min:15000,max:29000,t:3 },
+  { id:"heroin",name:"Heroin",e:"💉",min:5000,max:14000,t:3 },
+  { id:"ecstasy",name:"Ecstasy",e:"💎",min:2000,max:8000,t:2 },
+  { id:"acid",name:"Acid",e:"🌈",min:1000,max:4500,t:2 },
+  { id:"weed",name:"Weed",e:"🌿",min:300,max:900,t:1 },
+  { id:"speed",name:"Speed",e:"⚡",min:70,max:250,t:1 },
+  { id:"ludes",name:"Ludes",e:"💊",min:10,max:60,t:1 },
+];
+
+const NYC = [
+  { id:"bronx",name:"The Bronx",e:"🏚️",c:"#ef4444",bank:true,shark:true,r:"nyc" },
+  { id:"ghetto",name:"The Ghetto",e:"🔥",c:"#a855f7",r:"nyc" },
+  { id:"central_park",name:"Central Park",e:"🌳",c:"#22c55e",r:"nyc" },
+  { id:"manhattan",name:"Manhattan",e:"🏙️",c:"#3b82f6",r:"nyc" },
+  { id:"coney",name:"Coney Island",e:"🎡",c:"#f59e0b",r:"nyc" },
+  { id:"brooklyn",name:"Brooklyn",e:"🌉",c:"#ec4899",r:"nyc" },
+];
+
+const INTL = [
+  { id:"bogota",name:"Bogotá",e:"🇨🇴",c:"#dc2626",r:"intl",rep:30,fly:3000,td:2,pm:{cocaine:0.3,heroin:0.8} },
+  { id:"amsterdam",name:"Amsterdam",e:"🇳🇱",c:"#f97316",r:"intl",rep:50,fly:5000,td:2,pm:{ecstasy:0.35,weed:0.4,acid:0.5} },
+  { id:"bangkok",name:"Bangkok",e:"🇹🇭",c:"#14b8a6",r:"intl",rep:40,fly:4000,td:2,pm:{heroin:0.3,speed:0.35} },
+  { id:"marseille",name:"Marseille",e:"🇫🇷",c:"#6366f1",r:"intl",rep:60,fly:4500,td:2,pm:{heroin:0.45,cocaine:0.65} },
+];
+const LOCS = [...NYC,...INTL];
+
+const GANGS = [
+  { id:"col",name:"The Colombians",e:"🐍",c:"#dc2626",turf:["ghetto"] },
+  { id:"tri",name:"The Triads",e:"🐉",c:"#f59e0b",turf:["manhattan"] },
+  { id:"bra",name:"The Bratva",e:"🐻",c:"#6366f1",turf:["brooklyn"] },
+  { id:"car",name:"Medellín Cartel",e:"☠️",c:"#059669",turf:["coney"] },
+];
+
+const RANKS = [
+  {n:"Corner Boy",r:0,e:"🧢"},{n:"Street Dealer",r:15,e:"🔑"},{n:"Shot Caller",r:35,e:"📱"},
+  {n:"Lieutenant",r:60,e:"💼"},{n:"Underboss",r:100,e:"🎯"},{n:"Kingpin",r:160,e:"👑"},
+  {n:"Drug Lord",r:250,e:"🏆"},{n:"Ghost",r:400,e:"👻"},
+];
+
+const EVTS = [
+  {m:"Cops busted a cocaine shipment! Prices skyrocketed!",d:"cocaine",x:4,t:"spike"},
+  {m:"Addicts buying coke at insane prices!",d:"cocaine",x:7,t:"spike"},
+  {m:"Colombian freighter unloaded cheap coke!",d:"cocaine",x:0.3,t:"crash"},
+  {m:"Heroin bust! Supply dried up!",d:"heroin",x:4,t:"spike"},
+  {m:"Junkies desperate — heroin prices insane!",d:"heroin",x:7,t:"spike"},
+  {m:"Cheap heroin flooding in from overseas!",d:"heroin",x:0.35,t:"crash"},
+  {m:"Acid factory raided! Prices soaring!",d:"acid",x:4,t:"spike"},
+  {m:"Market flooded with cheap acid!",d:"acid",x:0.25,t:"crash"},
+  {m:"Weed drought — prices skyrocketed!",d:"weed",x:3.5,t:"spike"},
+  {m:"Dealers dumping weed everywhere!",d:"weed",x:0.25,t:"crash"},
+  {m:"Speed addicts paying premium!",d:"speed",x:5,t:"spike"},
+  {m:"Cheap speed flooding the streets!",d:"speed",x:0.2,t:"crash"},
+  {m:"Quaalude factory raided!",d:"ludes",x:6,t:"spike"},
+  {m:"Ludes dirt cheap everywhere!",d:"ludes",x:0.15,t:"crash"},
+  {m:"Rave scene exploded — ecstasy demand insane!",d:"ecstasy",x:5,t:"spike"},
+  {m:"Dutch ecstasy shipment arrived — dirt cheap!",d:"ecstasy",x:0.3,t:"crash"},
+];
+
+const RATNAMES = ["Jimmy Two-Shoes","Skinny Pete","Maria Espinoza","Dice","Nails","Whisper","Tina Blade","Switchblade Sam"];
+const RATTYPES = ["nervous","cocky","loyal","greedy"];
+
+const MILES = [
+  {id:"ft",cond:s=>s.trades>=1,m:"First Trade",e:"🎯"},
+  {id:"df",cond:s=>s.debt<=0,m:"Debt Free",e:"🦈"},
+  {id:"10k",cond:s=>s.cash+s.bank>=10000,m:"$10K Club",e:"💰"},
+  {id:"50k",cond:s=>s.cash+s.bank>=50000,m:"$50K",e:"💎"},
+  {id:"100k",cond:s=>s.cash+s.bank>=100000,m:"$100K",e:"🏆"},
+  {id:"ter",cond:s=>Object.keys(s.terr).length>=1,m:"First Territory",e:"🏴"},
+  {id:"emp",cond:s=>Object.keys(s.terr).length>=3,m:"Empire",e:"👑"},
+  {id:"s5",cond:s=>s.mstrk>=5,m:"5x Streak",e:"🔥"},
+  {id:"s10",cond:s=>s.mstrk>=10,m:"10x Streak",e:"🔥"},
+  {id:"surv",cond:s=>s.close>=3,m:"Survivor",e:"💀"},
+  {id:"intl",cond:s=>s.intl,m:"International",e:"✈️"},
+  {id:"gun",cond:s=>s.gun,m:"Armed",e:"🔫"},
+  {id:"big",cond:s=>s.best>=50000,m:"Big Score",e:"💥"},
+  {id:"rat",cond:s=>s.rat&&s.rat.hired,m:"Connected",e:"🐀"},
+];
+
+function getRank(rep) { let r=RANKS[0]; for(const x of RANKS) if(rep>=x.r) r=x; return r; }
+
+function genP(loc, ev) {
+  const l = LOCS.find(x=>x.id===loc);
+  const p = {};
+  DRUGS.forEach(d => {
+    if(C(0.12)){p[d.id]=null;return;}
+    let pr = R(d.min,d.max);
+    if(l?.pm?.[d.id]) pr = Math.round(pr*l.pm[d.id]);
+    if(ev && ev.d===d.id) { pr = Math.round(d.min*ev.x + Math.random()*d.min*0.15); if(l?.pm?.[d.id]) pr=Math.round(pr*l.pm[d.id]); }
+    p[d.id] = Math.max(1,pr);
+  });
+  return p;
+}
+
+function mkRat() { return {name:RATNAMES[R(0,RATNAMES.length-1)],pers:RATTYPES[R(0,3)],loy:50+R(-15,15),intel:R(1,3),alive:true,hired:false,cost:R(200,800),tips:0}; }
+
+function init(mode="solo") {
+  const ev = C(0.35) ? EVTS[R(0,EVTS.length-1)] : null;
+  const base = () => ({
+    day:1,cash:CASH0,debt:DEBT0,bank:0,loc:"bronx",inv:{},spc:SPACE0,
+    prices:genP("bronx",ev),prev:{},gun:false,hp:100,heat:0,
+    rep:0,profit:0,best:0,trades:0,strk:0,mstrk:0,combo:1,
+    avg:{},terr:{},gang:{col:0,tri:0,bra:0,car:0},
+    rat:mkRat(),ev:ev,evs:ev?[{d:1,m:ev.m,t:ev.t}]:[],
+    nms:[],offer:null,cops:null,trib:0,intl:false,
+    close:0,miles:[],newMile:null,recentSold:[],
+  });
+  if(mode==="2p") return {mode:"2p",phase:"title",turn:1,p1:{...base(),nm:"Player 1",pc:"#ef4444"},p2:{...base(),nm:"Player 2",pc:"#3b82f6",loc:"brooklyn",prices:genP("brooklyn",null)}};
+  return {mode:"solo",phase:"title",...base()};
+}
+
+// ════════════════════════════════════════════════════════════
+// MAIN
+// ════════════════════════════════════════════════════════════
+export default function App() {
+  const [gs,sGs] = useState(()=>init());
+  const [ui,sUi] = useState({tr:null,tq:"",tab:"market",shk:false,sub:null,nots:[]});
+  const nt = useRef(null);
+  const sfxQueue = useRef([]);
+
+  const cp = gs.mode==="2p" ? (gs.turn===1?gs.p1:gs.p2) : gs;
+  const scp = fn => {
+    sGs(p => {
+      if(p.mode==="2p"){const k=p.turn===1?"p1":"p2";const u=fn(p[k]);return{...p,[k]:{...p[k],...u}};}
+      const u=fn(p);return{...p,...u};
+    });
+  };
+
+  const used = Object.values(cp.inv).reduce((a,b)=>a+b,0);
+  const free = cp.spc - used;
+  const loc = LOCS.find(l=>l.id===cp.loc);
+  const rank = getRank(cp.rep);
+  const nw = cp.cash+cp.bank-cp.debt+Object.entries(cp.inv).reduce((s,[id,q])=>{const d=DRUGS.find(x=>x.id===id);return s+q*(cp.prices[id]||d.min);},0);
+
+  const notify = useCallback((m,t="info")=>{
+    sUi(u=>({...u,nots:[...u.nots.slice(-3),{m,t,k:Date.now()}]}));
+    if(nt.current)clearTimeout(nt.current);
+    nt.current=setTimeout(()=>sUi(u=>({...u,nots:[]})),3500);
+  },[]);
+  const shake = useCallback(()=>{ sUi(u=>({...u,shk:true})); setTimeout(()=>sUi(u=>({...u,shk:false})),500); },[]);
+
+  // Play queued SFX after state update (avoids side effects in updaters)
+  function flushSfx() {
+    const q = sfxQueue.current;
+    sfxQueue.current = [];
+    q.forEach(fn => fn());
+  }
+
+  function chkMiles(s) {
+    const ms=[...(s.miles||[])]; let nm=null;
+    for(const m of MILES){if(m.cond(s)&&!ms.includes(m.id)){ms.push(m.id);nm=m;}}
+    return {miles:ms,newMile:nm};
+  }
+
+  // ── TRAVEL ───────────────────────────────────────────────
+  function travel(lid) {
+    if(lid===cp.loc) return;
+    SFX.tick();
+    const dest=LOCS.find(l=>l.id===lid);
+    if(dest.r==="intl") {
+      if(cp.rep<dest.rep){notify(`Need ${dest.rep} rep to unlock ${dest.name}.`,"danger");return;}
+      if(cp.cash<dest.fly){notify(`Flight costs ${$(dest.fly)}.`,"danger");return;}
+    }
+    let pendingShake = false;
+    let pendingSfx = [];
+    sGs(prev => {
+      const p = prev.mode==="2p" ? {...prev[prev.turn===1?"p1":"p2"]} : {...prev};
+      const td = dest.td||1;
+      p.day+=td;
+      if(dest.r==="intl"){p.cash-=dest.fly;p.intl=true;}
+      p.loc=lid;
+      p.debt=Math.round(p.debt*Math.pow(1+DINT,td));
+      p.bank=Math.round(p.bank*Math.pow(1+BINT,td));
+      p.heat=Math.max(0,p.heat-R(3,10));
+      // Tribute
+      const trib=Object.values(p.terr).reduce((s,d)=>s+(d.tr||0),0);
+      p.trib=trib; p.cash+=trib*td;
+      // Market
+      const ev=C(0.38)?EVTS[R(0,EVTS.length-1)]:null;
+      p.ev=ev; p.prev={...p.prices}; p.prices=genP(lid,ev);
+      if(ev) p.evs=[...p.evs,{d:p.day,m:ev.m,t:ev.t}];
+      // NEAR MISS (dopamine)
+      const nms=[];
+      for(const[id,q] of Object.entries(p.inv)){
+        if(q<=0)continue;const pr=p.prev[id],now=p.prices[id];
+        if(pr&&now&&now>pr*2.5) nms.push({drug:DRUGS.find(x=>x.id===id),pr,now,q,miss:q*(now-pr)});
+      }
+      p.nms=nms;
+      // SOLD-TOO-EARLY near miss (even more painful dopamine)
+      if(p.recentSold && p.recentSold.length > 0){
+        for(const rs of p.recentSold){
+          const now=p.prices[rs.id];
+          if(now&&now>rs.price*2) nms.push({drug:DRUGS.find(x=>x.id===rs.id),pr:rs.price,now,q:rs.qty,miss:rs.qty*(now-rs.price),type:"sold_early"});
+        }
+      }
+      p.recentSold=[];
+      // Gang tax
+      const lg=GANGS.find(g=>g.turf.includes(lid));
+      if(lg&&!p.terr[lid]&&p.gang[lg.id]<-15&&C(0.3)){
+        const tax=Math.round(p.cash*R(5,18)/100);p.cash-=tax;
+        p.evs=[...p.evs,{d:p.day,m:`${lg.e} ${lg.name} taxed you ${$(tax)}!`,t:"danger"}];
+        pendingShake=true;
+      }
+      // Rat
+      if(p.rat.hired&&p.rat.alive){
+        p.rat={...p.rat,loy:p.rat.loy+R(-3,4)};
+        if(p.rat.loy<20&&C(0.03+(50-p.rat.loy)/400)){
+          p.rat={...p.rat,alive:false};p.heat+=40;
+          p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name} RATTED YOU OUT! Heat surging!`,t:"danger"}];
+          pendingShake=true;
+          pendingSfx.push(()=>SFX.bad());
+        } else if(C(0.22+p.rat.intel*0.07)){
+          const td2=DRUGS[R(0,DRUGS.length-1)];const tt=C(0.5)?"spike":"crash";
+          p.rat={...p.rat,tips:p.rat.tips+1};
+          p.evs=[...p.evs,{d:p.day,m:`🐀 ${p.rat.name}: "${td2.name} gonna ${tt==="spike"?"explode":"crash"} soon..."`,t:"tip"}];
+        }
+      }
+      // Cops — use fresh inventory count, not stale closure
+      const curUsed = Object.values(p.inv).reduce((a,b)=>a+b,0);
+      const cc=0.12+p.heat/350+(dest.r==="intl"?0.1:0);
+      if(C(cc)&&curUsed>0){
+        p.cops={n:R(1,2+Math.floor(p.heat/30)),br:R(400,1500)};
+        if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"cop"};
+        return{...prev,...p,phase:"cop"};
+      }
+      // Mugging
+      if(C(0.07)){const s=Math.round(p.cash*R(8,28)/100);p.cash-=s;p.evs=[...p.evs,{d:p.day,m:`Mugged! Lost ${$(s)}!`,t:"danger"}];pendingShake=true;}
+      // Offers
+      p.offer=null;
+      if(!p.gun&&C(0.14)) p.offer={type:"gun",price:R(300,600)};
+      else if(C(0.12)){const sp=R(20,35);p.offer={type:"coat",price:R(150,400),sp};}
+      else if(!p.rat.hired&&C(0.08)&&p.rep>=10) p.offer={type:"rat",rat:mkRat()};
+      else if(p.rep>=25&&C(0.1)&&!p.terr[lid]){
+        const lg2=GANGS.find(g=>g.turf.includes(lid));
+        if(!lg2||p.gang[lg2.id]>5) p.offer={type:"terr",lid,cost:R(3000,12000),tr:R(100,500)};
+      }
+      // Milestones
+      const{miles,newMile}=chkMiles(p);p.miles=miles;p.newMile=newMile;
+      // End?
+      if(p.day>DAYS){
+        if(prev.mode==="2p"){const k=prev.turn===1?"p1":"p2";const u={...prev,[k]:p};const ok=prev.turn===1?"p2":"p1";if(u[ok].day>DAYS)return{...u,phase:"end"};return{...u,turn:prev.turn===1?2:1,phase:"playing"};}
+        return{...prev,...p,phase:p.cash+p.bank>=p.debt?"win":"end"};
+      }
+      if(p.hp<=0){if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"end"};return{...prev,...p,phase:"end"};}
+      if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"playing"};
+      return{...prev,...p,phase:"playing"};
+    });
+    // Fire side effects after state update
+    if(pendingShake) shake();
+    pendingSfx.forEach(fn => fn());
+  }
+
+  // ── TRADE ────────────────────────────────────────────────
+  function doTrade() {
+    const{tr,tq}=ui; if(!tr)return;
+    const drug=DRUGS.find(d=>d.id===tr.did);
+    const price=cp.prices[drug.id]; if(!price)return;
+    let pendingSfx = null;
+    sGs(prev=>{
+      const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
+      const u=Object.values(p.inv).reduce((a,b)=>a+b,0);
+      const sp=p.spc-u;
+      if(tr.type==="buy"){
+        const mx=Math.min(Math.floor(p.cash/price),sp);
+        const q=Math.min(tq==="max"?99999:parseInt(tq)||0,mx);
+        if(q<=0)return prev;
+        p.cash-=q*price;
+        p.inv={...p.inv,[drug.id]:(p.inv[drug.id]||0)+q};
+        const pq=prev.mode==="2p"?(prev[prev.turn===1?"p1":"p2"].inv[drug.id]||0):(prev.inv[drug.id]||0);
+        const pa=prev.mode==="2p"?(prev[prev.turn===1?"p1":"p2"].avg[drug.id]||0):(prev.avg[drug.id]||0);
+        p.avg={...p.avg,[drug.id]:(pa*pq+price*q)/(pq+q)};
+        p.heat+=Math.ceil(q*price/12000);p.trades++;
+        pendingSfx = ()=>SFX.buy();
+      } else {
+        const own=p.inv[drug.id]||0;
+        const q=Math.min(tq==="max"?99999:parseInt(tq)||0,own);
+        if(q<=0)return prev;
+        const rev=q*price;const ab=p.avg[drug.id]||price;
+        const pnl=rev-q*ab;
+        p.cash+=rev;
+        const newInv={...p.inv,[drug.id]:own-q};
+        if(newInv[drug.id]<=0){delete newInv[drug.id];const na={...p.avg};delete na[drug.id];p.avg=na;}
+        p.inv=newInv;
+        p.profit+=pnl;if(pnl>p.best)p.best=pnl;
+        // Track for near-miss (sold-too-early dopamine pain)
+        p.recentSold=[...(p.recentSold||[]),{id:drug.id,price,qty:q}];
+        if(pnl>0){
+          p.strk++;if(p.strk>p.mstrk)p.mstrk=p.strk;
+          p.combo=Math.min(5,1+p.strk*0.15);
+          p.rep+=Math.ceil((pnl/4000)*p.combo);
+          const g=GANGS.find(x=>x.turf.includes(p.loc));
+          if(g)p.gang={...p.gang,[g.id]:p.gang[g.id]+1};
+          pendingSfx = pnl>5000 ? ()=>SFX.big() : ()=>SFX.sell();
+        }else{p.strk=0;p.combo=1;pendingSfx=()=>SFX.miss();}
+        p.trades++;p.heat+=Math.ceil(rev/15000);
+      }
+      const{miles,newMile}=chkMiles(p);p.miles=miles;p.newMile=newMile;
+      if(newMile) pendingSfx=()=>SFX.lvl();
+      if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p};
+      return{...prev,...p};
+    });
+    if(pendingSfx) pendingSfx();
+    sUi(u=>({...u,tr:null,tq:""}));
+  }
+
+  // ── COP ──────────────────────────────────────────────────
+  function copAct(a) {
+    SFX.bad();
+    let pendingShake = false;
+    sGs(prev=>{
+      const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
+      const c=p.cops;
+      if(a==="run"){
+        if(C(p.gun?0.55:0.38)){
+          p.evs=[...p.evs,{d:p.day,m:"Escaped! Heart pounding!",t:"info"}];p.close++;p.heat+=12;
+        }else{
+          const l=Math.round(p.cash*0.2);p.cash-=l;
+          const dk=Object.keys(p.inv);
+          if(dk.length){
+            const k=dk[R(0,dk.length-1)];const lq=Math.ceil(p.inv[k]*R(30,60)/100);
+            const newInv={...p.inv,[k]:p.inv[k]-lq};
+            if(newInv[k]<=0) delete newInv[k];
+            p.inv=newInv;
+          }
+          p.hp-=R(5,18);p.heat+=18;p.close++;pendingShake=true;
+          p.evs=[...p.evs,{d:p.day,m:`Caught! Lost ${$(l)} and product.`,t:"danger"}];
+        }
+      }else if(a==="fight"){
+        let kl=0,dm=0;for(let i=0;i<c.n;i++){if(C(p.gun?0.45:0.15))kl++;else dm+=R(p.gun?5:12,p.gun?15:30);}
+        p.hp-=dm;p.heat+=25+kl*12;p.rep+=kl*8;p.close++;pendingShake=true;
+        p.evs=[...p.evs,{d:p.day,m:`Shootout! ${kl}/${c.n} down.${dm>20?" Hurt bad.":""}`,t:"danger"}];
+      }else{
+        const amt=c.br*c.n;if(p.cash>=amt){p.cash-=amt;p.heat-=8;p.evs=[...p.evs,{d:p.day,m:`Bribed cops for ${$(amt)}.`,t:"info"}];}
+        else{p.evs=[...p.evs,{d:p.day,m:"Can't afford bribe!",t:"danger"}];return prev;}
+      }
+      p.cops=null;
+      if(p.hp<=0){if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"end"};return{...prev,...p,phase:"end"};}
+      if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p,phase:"playing"};
+      return{...prev,...p,phase:"playing"};
+    });
+    if(pendingShake) shake();
+  }
+
+  // ── OFFER ────────────────────────────────────────────────
+  function offer(ok) {
+    let pendingSfx = null;
+    sGs(prev=>{
+      const p=prev.mode==="2p"?{...prev[prev.turn===1?"p1":"p2"]}:{...prev};
+      if(!ok){p.offer=null;if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p};return{...prev,...p};}
+      const o=p.offer;
+      if(o.type==="gun"&&p.cash>=o.price){p.cash-=o.price;p.gun=true;pendingSfx=()=>SFX.buy();}
+      else if(o.type==="coat"&&p.cash>=o.price){p.cash-=o.price;p.spc+=o.sp;pendingSfx=()=>SFX.buy();}
+      else if(o.type==="rat"&&p.cash>=o.rat.cost){p.cash-=o.rat.cost;p.rat={...o.rat,hired:true};pendingSfx=()=>SFX.buy();p.evs=[...p.evs,{d:p.day,m:`🐀 Hired ${o.rat.name}.`,t:"info"}];}
+      else if(o.type==="terr"&&p.cash>=o.cost){p.cash-=o.cost;p.terr={...p.terr,[o.lid]:{tr:o.tr,d:p.day}};p.rep+=15;pendingSfx=()=>SFX.lvl();p.evs=[...p.evs,{d:p.day,m:`🏴 Claimed ${LOCS.find(l=>l.id===o.lid)?.name}! +${$(o.tr)}/day`,t:"info"}];}
+      p.offer=null;const{miles}=chkMiles(p);p.miles=miles;
+      if(prev.mode==="2p")return{...prev,[prev.turn===1?"p1":"p2"]:p};
+      return{...prev,...p};
+    });
+    if(pendingSfx) pendingSfx();
+  }
+
+  function bk(t,a){scp(p=>{const v=a==="all"?(t==="dep"?p.cash:p.bank):Math.max(0,parseInt(a)||0);if(t==="dep"){const x=Math.min(v,p.cash);return{cash:p.cash-x,bank:p.bank+x};}else{const x=Math.min(v,p.bank);return{cash:p.cash+x,bank:p.bank-x};}});}
+  function sk(a){scp(p=>{const v=a==="all"?Math.min(p.cash,p.debt):Math.min(parseInt(a)||0,p.cash,p.debt);const updated={...p,cash:p.cash-v,debt:p.debt-v};const{miles}=chkMiles(updated);return{cash:updated.cash,debt:updated.debt,miles};});}
+  function payRat(){scp(p=>{if(p.cash<150||!p.rat.hired||!p.rat.alive)return{};return{cash:p.cash-150,rat:{...p.rat,loy:Math.min(100,p.rat.loy+R(5,12))}};}); notify("Loyalty boosted.","info");}
+
+  // ════════════════════════════════════════════════════════
+  // RENDER
+  // ════════════════════════════════════════════════════════
+
+  // TITLE
+  if(gs.phase==="title"){
+    return(
+      <div style={Z.root}><style>{CSS}</style>
+        <div style={Z.ctr}>
+          <div style={{fontSize:9,letterSpacing:8,color:"#334155",textTransform:"uppercase",marginBottom:12}}>Empire Edition</div>
+          <h1 style={{fontSize:56,fontWeight:900,margin:0,background:"linear-gradient(135deg, #ef4444, #f59e0b, #ec4899)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:-3,lineHeight:1}}>DRUG<br/>WARS</h1>
+          <div style={{width:80,height:1,background:"linear-gradient(90deg,transparent,#ef4444,transparent)",margin:"16px auto"}}/>
+          <p style={{color:"#475569",fontSize:12,lineHeight:1.8,maxWidth:380,margin:"0 auto 20px"}}>
+            You owe <b style={{color:"#ef4444"}}>{$(DEBT0)}</b> to the shark. <b style={{color:"#22c55e"}}>{$(CASH0)}</b> in your pocket.
+            <b style={{color:"#f59e0b"}}> 30 days</b> to build an empire, go international, control territory, and survive.
+          </p>
+          <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
+            {["🌍 International","🏴 Territory","🐀 Informants","⚔️ Gangs","📈 Near Misses","👑 Ranks"].map((t,i)=>
+              <span key={i} style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.05)",borderRadius:16,padding:"3px 8px",fontSize:9,color:"#475569"}}>{t}</span>
+            )}
+          </div>
+          <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+            <button onClick={()=>sGs({...init("solo"),phase:"playing"})} style={Z.pri}>SOLO</button>
+            <button onClick={()=>sGs({...init("2p"),phase:"playing"})} style={{...Z.pri,background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",boxShadow:"0 4px 20px rgba(59,130,246,0.3)"}}>2 PLAYER</button>
+          </div>
+          <div style={{fontSize:8,color:"#1e293b",marginTop:16}}>Based on John E. Dell's 1984 classic</div>
+        </div>
+      </div>
+    );
+  }
+
+  // END/WIN
+  if(gs.phase==="end"||gs.phase==="win"){
+    const w=gs.phase==="win";
+    const fn=cp.cash+cp.bank-cp.debt;
+    const fr=getRank(cp.rep);
+    return(
+      <div style={Z.root}><style>{CSS}</style>
+        <div style={Z.ctr}>
+          <div style={{fontSize:56,marginBottom:4}}>{w?fr.e:"💀"}</div>
+          <h1 style={{fontSize:30,fontWeight:900,color:w?"#22c55e":"#ef4444",margin:"0 0 4px"}}>{w?"SURVIVED":cp.hp<=0?"DEAD":"GAME OVER"}</h1>
+          {gs.mode==="2p"?(
+            <div style={{margin:"8px 0 16px"}}>
+              {[gs.p1,gs.p2].map((px,i)=>{const n2=px.cash+px.bank-px.debt;return(
+                <div key={i} style={{fontSize:18,fontWeight:800,color:i===0?"#ef4444":"#3b82f6",margin:"4px 0"}}>P{i+1}: {$(n2)} {getRank(px.rep).e}</div>
+              );})}
+            </div>
+          ):(
+            <><div style={{fontSize:13,color:"#f59e0b",fontWeight:800}}>{fr.n}</div>
+            <div style={{fontSize:26,fontWeight:900,color:"#f8fafc",margin:"6px 0 12px"}}>Net: {$(fn)}</div></>
+          )}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,maxWidth:360,margin:"0 auto 16px"}}>
+            {[{l:"Trades",v:cp.trades},{l:"Best",v:$(cp.best),c:"#22c55e"},{l:"Streak",v:`${cp.mstrk}x`},{l:"Territories",v:Object.keys(cp.terr).length},{l:"Close Calls",v:cp.close},{l:"Rep",v:cp.rep},{l:"HP",v:`${cp.hp}%`},{l:"Milestones",v:cp.miles?.length||0},{l:"Days",v:Math.min(cp.day-1,30)}].map((s,i)=>
+              <div key={i} style={{background:"rgba(255,255,255,0.03)",borderRadius:5,padding:"6px",textAlign:"center"}}>
+                <div style={{fontSize:7,color:"#334155",textTransform:"uppercase",letterSpacing:1}}>{s.l}</div>
+                <div style={{fontSize:13,fontWeight:800,color:s.c||"#cbd5e1"}}>{s.v}</div>
+              </div>
+            )}
+          </div>
+          {/* Milestone trophies */}
+          <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap",marginBottom:12}}>
+            {MILES.map(m=><span key={m.id} style={{fontSize:18,opacity:cp.miles?.includes(m.id)?1:0.12,filter:cp.miles?.includes(m.id)?"none":"grayscale(1)"}}>{m.e}</span>)}
+          </div>
+          <button onClick={()=>sGs({...init(),phase:"title"})} style={Z.pri}>PLAY AGAIN</button>
+        </div>
+      </div>
+    );
+  }
+
+  // COPS
+  if(gs.phase==="cop"){
+    const cops2=cp.cops;const bribeCost=cops2.br*cops2.n;
+    return(
+      <div style={Z.root}><style>{CSS}</style>
+        <div className={ui.shk?"shk":""} style={{...Z.ctr,background:"radial-gradient(circle at 50% 20%,rgba(239,68,68,0.08),transparent)"}}>
+          <div style={{fontSize:56,animation:"pulse 0.7s infinite"}}>🚨</div>
+          <h2 style={{fontSize:24,fontWeight:900,color:"#ef4444",margin:"8px 0"}}>POLICE!</h2>
+          <p style={{color:"#fca5a5",fontSize:13,margin:"0 0 2px"}}>{cops2.n} officer{cops2.n>1?"s":""} closing in!</p>
+          <p style={{color:"#475569",fontSize:11,marginBottom:16}}>Carrying {used} units • Heat {cp.heat}%</p>
+          <div style={{display:"flex",flexDirection:"column",gap:8,maxWidth:240,margin:"0 auto"}}>
+            <button onClick={()=>copAct("run")} style={{...Z.actBtn,background:"linear-gradient(135deg,#3b82f6,#1d4ed8)"}}>🏃 RUN <small style={{opacity:0.7}}>{cp.gun?"55%":"38%"}</small></button>
+            <button onClick={()=>copAct("fight")} style={{...Z.actBtn,background:"linear-gradient(135deg,#ef4444,#b91c1c)"}}>{cp.gun?"🔫":"👊"} FIGHT <small style={{opacity:0.7}}>{cp.gun?"armed":"bare fists"}</small></button>
+            <button onClick={()=>copAct("bribe")} disabled={cp.cash < bribeCost} style={{...Z.actBtn,background:cp.cash>=bribeCost?"linear-gradient(135deg,#f59e0b,#b45309)":"#1e293b",opacity:cp.cash>=bribeCost?1:0.4}}>💰 BRIBE <small style={{opacity:0.7}}>{$(bribeCost)}</small></button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // TRADE MODAL
+  if(ui.tr){
+    const drug=DRUGS.find(d=>d.id===ui.tr.did);const price=cp.prices[drug.id];
+    const own=cp.inv[drug.id]||0;const ib=ui.tr.type==="buy";
+    const mb=price?Math.min(Math.floor(cp.cash/price),free):0;const mq=ib?mb:own;
+    const q=ui.tq==="max"?mq:Math.min(parseInt(ui.tq)||0,mq);
+    const tot=q*(price||0);const ab=cp.avg[drug.id];
+    const pnl=!ib&&ab?q*(price-ab):0;const pp=!ib&&ab?((price-ab)/ab*100):0;
+    const handleTradeKey = (e) => { if(e.key==="Enter"&&q>0) doTrade(); if(e.key==="Escape") sUi(u=>({...u,tr:null,tq:""})); };
+    return(
+      <div style={Z.root}><style>{CSS}</style>
+        <div style={Z.ctr}>
+          <div style={{fontSize:36}}>{drug.e}</div>
+          <h3 style={{color:"#f8fafc",fontSize:20,fontWeight:900,margin:"4px 0 2px"}}>{ib?"BUY":"SELL"} {drug.name}</h3>
+          <div style={{color:"#94a3b8",fontSize:13}}>{$(price)} each</div>
+          {!ib&&ab&&<div style={{fontSize:22,fontWeight:900,color:pp>0?"#22c55e":"#ef4444",margin:"4px 0"}}>{pp>0?"+":""}{pp.toFixed(0)}% {pp>80?"🔥":pp>150?"💥":""}</div>}
+          <div style={{color:"#475569",fontSize:11,marginBottom:10}}>{ib?`Max ${mb}`:`Own ${own}`} {cp.strk>1&&!ib?`• ${cp.strk}x streak`:""}</div>
+          <input type="text" value={ui.tq} autoFocus onChange={e=>sUi(u=>({...u,tq:e.target.value}))} onKeyDown={handleTradeKey} placeholder="Qty..." style={Z.inp}/>
+          <div style={{display:"flex",gap:4,margin:"8px 0",justifyContent:"center",flexWrap:"wrap"}}>
+            {[1,5,10,25,50].filter(n=>n<=mq).map(n=><button key={n} onClick={()=>sUi(u=>({...u,tq:String(n)}))} style={Z.qb}>{n}</button>)}
+            {mq>2&&<button onClick={()=>sUi(u=>({...u,tq:String(Math.floor(mq/2))}))} style={Z.qb}>½</button>}
+            <button onClick={()=>sUi(u=>({...u,tq:"max"}))} style={{...Z.qb,background:"#22c55e",color:"#000",fontWeight:800}}>MAX</button>
+          </div>
+          {q>0&&<div style={{fontSize:12,color:"#94a3b8",margin:"4px 0 10px"}}>Total: <b style={{color:"#f8fafc"}}>{$(tot)}</b>{!ib&&pnl!==0&&<span style={{color:pnl>0?"#22c55e":"#ef4444",fontWeight:700,marginLeft:8}}>({pnl>0?"+":""}{$(pnl)})</span>}</div>}
+          <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+            <button onClick={()=>sUi(u=>({...u,tr:null,tq:""}))} style={Z.ghost}>Cancel</button>
+            <button onClick={doTrade} disabled={q<=0} style={{...Z.pri,padding:"10px 24px",fontSize:13,opacity:q>0?1:0.3}}>{ib?"BUY":"SELL"} {q>0?q:""}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════ MAIN GAME ════════
+  return(
+    <div style={Z.root}><style>{CSS}</style>
+      {/* Notifs */}
+      <div style={{position:"fixed",top:6,right:6,zIndex:999,display:"flex",flexDirection:"column",gap:4,pointerEvents:"none"}}>
+        {ui.nots.map(n=><div key={n.k} style={{background:n.t==="profit"?"#16a34a":n.t==="danger"?"#dc2626":n.t==="tip"?"#7c3aed":"#1e40af",color:"#fff",padding:"6px 12px",borderRadius:5,fontSize:11,fontWeight:600,animation:"si .2s ease",boxShadow:"0 4px 16px rgba(0,0,0,.5)",maxWidth:200}}>{n.m}</div>)}
+      </div>
+      <div className={ui.shk?"shk":""} style={Z.game}>
+        {/* 2P indicator */}
+        {gs.mode==="2p"&&<div style={{display:"flex",justifyContent:"center",gap:6,padding:"4px",background:"rgba(255,255,255,0.02)"}}>
+          <span style={{padding:"2px 10px",borderRadius:10,fontSize:10,fontWeight:700,background:gs.turn===1?"#ef444422":"transparent",color:gs.turn===1?"#ef4444":"#334155"}}>P1</span>
+          <span style={{padding:"2px 10px",borderRadius:10,fontSize:10,fontWeight:700,background:gs.turn===2?"#3b82f622":"transparent",color:gs.turn===2?"#3b82f6":"#334155"}}>P2</span>
+        </div>}
+        {/* HEADER */}
+        <div style={Z.hdr}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontSize:8,color:"#334155",letterSpacing:2}}>DAY {Math.min(cp.day,DAYS)}/{DAYS}</div>
+              <div style={{fontSize:22,fontWeight:900,color:"#f8fafc",lineHeight:1}}>{$(cp.cash)}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:8,color:"#475569"}}>{rank.e} {rank.n.toUpperCase()}</div>
+              <div style={{fontSize:14,fontWeight:800,color:nw>0?"#22c55e":"#ef4444"}}>{$(nw)}</div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:3,margin:"5px 0"}}>
+            <MS l="DEBT" v={$(cp.debt)} c={cp.debt>0?"#ef4444":"#22c55e"}/>
+            <MS l="BANK" v={$(cp.bank)} c="#3b82f6"/>
+            <MS l="SPACE" v={`${free}/${cp.spc}`} c={free<15?"#f59e0b":"#475569"}/>
+            <MS l="REP" v={cp.rep} c="#a855f7"/>
+          </div>
+          <Bar l="🔥 HEAT" p={cp.heat} c={cp.heat<30?"#22c55e":cp.heat<60?"#f59e0b":"#ef4444"}/>
+          <Bar l="❤️ HP" p={cp.hp} c={cp.hp>60?"#22c55e":cp.hp>30?"#f59e0b":"#ef4444"}/>
+          {cp.strk>1&&<div style={{textAlign:"center",fontSize:10,color:"#f59e0b",fontWeight:700,margin:"2px 0",animation:"pulse 1.5s infinite"}}>🔥 {cp.strk}x STREAK {cp.combo>1.5?"— rep bonus!":""}</div>}
+          {cp.newMile&&<div style={{textAlign:"center",fontSize:11,color:"#f59e0b",fontWeight:800,animation:"pulse 1s 3"}}>🏆 MILESTONE: {cp.newMile.e} {cp.newMile.m}!</div>}
+          <div style={{height:3,background:"#0f172a",borderRadius:2,overflow:"hidden",marginTop:3}}>
+            <div style={{height:"100%",width:`${Math.min(cp.day/DAYS*100,100)}%`,background:cp.day>25?"linear-gradient(90deg,#f59e0b,#ef4444)":"linear-gradient(90deg,#1e40af,#3b82f6)",transition:"width .5s"}}/>
+          </div>
+        </div>
+        {/* LOCATION */}
+        <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 12px"}}>
+          <div style={{width:7,height:7,borderRadius:"50%",background:loc.c,boxShadow:`0 0 6px ${loc.c}44`}}/>
+          <span style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{loc.e} {loc.name}</span>
+          {cp.terr[cp.loc]&&<span style={{fontSize:8,color:"#22c55e"}}>🏴 +{$(cp.terr[cp.loc].tr)}/d</span>}
+          <div style={{marginLeft:"auto",display:"flex",gap:3}}>
+            {cp.gun&&<span>🔫</span>}{cp.rat.hired&&cp.rat.alive&&<span title={`${cp.rat.name} ${cp.rat.loy}%`}>🐀</span>}
+            {Object.keys(cp.terr).length>0&&<span style={{fontSize:10}}>{Object.keys(cp.terr).length}🏴</span>}
+          </div>
+        </div>
+        {/* EVENT */}
+        {cp.ev&&<div style={{margin:"0 8px 3px",padding:"5px 8px",borderRadius:5,background:cp.ev.t==="spike"?"rgba(239,68,68,0.08)":"rgba(34,197,94,0.08)",border:`1px solid ${cp.ev.t==="spike"?"#ef444425":"#22c55e25"}`,fontSize:10,color:cp.ev.t==="spike"?"#fca5a5":"#86efac",fontWeight:600}}>{cp.ev.t==="spike"?"📈":"📉"} {cp.ev.m}</div>}
+        {/* NEAR MISS — DOPAMINE */}
+        {cp.nms.length>0&&<div style={{margin:"0 8px 3px",padding:"6px 8px",borderRadius:5,background:"rgba(249,115,22,0.06)",border:"1px solid rgba(249,115,22,0.15)",fontSize:10,color:"#fdba74",animation:"pulse 2s infinite"}}>
+          😱 <b>{cp.nms[0].type==="sold_early"?"Sold too early!":"Near miss!"}</b> {cp.nms[0].drug.e} {cp.nms[0].drug.name} {cp.nms[0].type==="sold_early"?"jumped to":"spiked to"} {$(cp.nms[0].now)} — {cp.nms[0].type==="sold_early"?"you just sold":"you had"} {cp.nms[0].q}! Missed {$(cp.nms[0].miss)}!
+        </div>}
+        {/* OFFER */}
+        {cp.offer&&<div style={{margin:"0 8px 3px",padding:"6px 8px",borderRadius:5,background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.15)"}}>
+          <div style={{fontSize:11,color:"#a5b4fc",fontWeight:600,marginBottom:3}}>
+            {cp.offer.type==="gun"&&`🔫 Piece for sale — ${$(cp.offer.price)}`}
+            {cp.offer.type==="coat"&&`🧥 Bigger coat (+${cp.offer.sp}) — ${$(cp.offer.price)}`}
+            {cp.offer.type==="rat"&&`🐀 "${cp.offer.rat.name}" wants to be your informant — ${$(cp.offer.rat.cost)} (${cp.offer.rat.pers})`}
+            {cp.offer.type==="terr"&&`🏴 Take over ${LOCS.find(l=>l.id===cp.offer.lid)?.name} — ${$(cp.offer.cost)} (+${$(cp.offer.tr)}/day)`}
+          </div>
+          <div style={{display:"flex",gap:5}}>
+            <button onClick={()=>offer(true)} disabled={cp.cash<(cp.offer.price||cp.offer.cost||cp.offer.rat?.cost)} style={{...Z.sm,background:"#4f46e5"}}>Accept</button>
+            <button onClick={()=>offer(false)} style={{...Z.sm,background:"#1e293b"}}>Pass</button>
+          </div>
+        </div>}
+        {/* TABS */}
+        <div style={{display:"flex",margin:"3px 8px",gap:1,background:"rgba(255,255,255,0.015)",borderRadius:5,padding:1}}>
+          {["market","map","intel"].map(t=><button key={t} onClick={()=>sUi(u=>({...u,tab:t,sub:null}))} style={{flex:1,background:ui.tab===t?"rgba(255,255,255,0.05)":"transparent",border:"none",borderRadius:3,padding:"5px 0",fontSize:9,fontWeight:700,color:ui.tab===t?"#cbd5e1":"#334155",cursor:"pointer",textTransform:"uppercase",letterSpacing:1,fontFamily:"inherit"}}>{t==="market"?"📊 Market":t==="map"?"🗺️ Travel":"📡 Intel"}</button>)}
+        </div>
+
+        {/* ── MARKET ── */}
+        {ui.tab==="market"&&<div style={{padding:"3px 8px 6px"}}>
+          {cp.loc==="bronx"&&<div style={{display:"flex",gap:4,marginBottom:4}}>
+            <button onClick={()=>sUi(u=>({...u,sub:u.sub==="bk"?null:"bk"}))} style={{...Z.sm,flex:1,background:ui.sub==="bk"?"#1e40af":"rgba(59,130,246,0.08)",color:"#93c5fd"}}>🏦 Bank {cp.bank>0&&<small style={{opacity:.6}}>({$(cp.bank)})</small>}</button>
+            <button onClick={()=>sUi(u=>({...u,sub:u.sub==="sk"?null:"sk"}))} style={{...Z.sm,flex:1,background:ui.sub==="sk"?"#7f1d1d":"rgba(239,68,68,0.06)",color:"#fca5a5"}}>🦈 Shark {cp.debt>0&&<small style={{opacity:.6}}>({$(cp.debt)})</small>}</button>
+          </div>}
+          {ui.sub==="bk"&&<div style={{padding:6,background:"rgba(59,130,246,0.04)",borderRadius:5,marginBottom:4,border:"1px solid rgba(59,130,246,0.1)"}}>
+            <div style={{fontSize:9,color:"#93c5fd",marginBottom:3}}>Balance: <b>{$(cp.bank)}</b> • 5%/day</div>
+            <div style={{display:"flex",gap:3}}><button onClick={()=>bk("dep","all")} style={Z.sm}>Deposit All</button><button onClick={()=>bk("wd","all")} style={Z.sm}>Withdraw All</button></div>
+          </div>}
+          {ui.sub==="sk"&&<div style={{padding:6,background:"rgba(239,68,68,0.04)",borderRadius:5,marginBottom:4,border:"1px solid rgba(239,68,68,0.1)"}}>
+            <div style={{fontSize:9,color:"#fca5a5",marginBottom:3}}>Owe: <b>{$(cp.debt)}</b> • 10%/day!</div>
+            <div style={{display:"flex",gap:3}}><button onClick={()=>sk("all")} style={{...Z.sm,background:"#dc2626"}}>Pay All ({$(Math.min(cp.cash,cp.debt))})</button><button onClick={()=>sk(String(Math.floor(Math.min(cp.cash,cp.debt)/2)))} style={{...Z.sm,background:"#991b1b"}}>Pay Half</button></div>
+          </div>}
+          <div style={{display:"flex",flexDirection:"column",gap:1}}>
+            {DRUGS.map(d=>{
+              const pr=cp.prices[d.id],own=cp.inv[d.id]||0,ab=cp.avg[d.id];
+              const pnl=pr&&ab&&own>0?((pr-ab)/ab*100):null;
+              const mb=pr?Math.min(Math.floor(cp.cash/pr),free):0;
+              const pp=cp.prev[d.id];const pc=pr&&pp?((pr-pp)/pp*100):null;
+              return(
+                <div key={d.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 68px 36px 46px 46px",alignItems:"center",padding:"5px 6px",borderRadius:4,gap:3,background:pnl&&pnl>30?"rgba(34,197,94,0.03)":"rgba(255,255,255,0.01)",borderLeft:pnl&&pnl>30?"2px solid #22c55e":pnl&&pnl<-20?"2px solid #ef4444":"2px solid transparent",opacity:pr?1:.25}}>
+                  <span style={{fontSize:14}}>{d.e}</span>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,color:"#e2e8f0"}}>{d.name}</div>
+                    {pc!==null&&pc!==0&&<div style={{fontSize:8,color:pc>0?"#22c55e":pc<0?"#ef4444":"#334155"}}>{pc>0?"▲":"▼"}{Math.abs(pc).toFixed(0)}%</div>}
+                  </div>
+                  <div style={{textAlign:"right",fontSize:12,fontWeight:800,color:pr?"#f8fafc":"#1e293b"}}>{pr?$(pr):"—"}</div>
+                  <div style={{textAlign:"center",fontSize:10,color:own>0?"#e2e8f0":"#1e293b"}}>{own||"—"}{pnl!==null&&own>0&&<div style={{fontSize:7,fontWeight:700,color:pnl>0?"#22c55e":"#ef4444"}}>{pnl>0?"+":""}{pnl.toFixed(0)}%</div>}</div>
+                  <button disabled={!pr||mb<=0} onClick={()=>sUi(u=>({...u,tr:{type:"buy",did:d.id},tq:""}))} style={{...Z.tb,background:pr&&mb>0?"linear-gradient(135deg,#22c55e,#16a34a)":"#0f172a",color:pr&&mb>0?"#fff":"#1e293b"}}>BUY</button>
+                  <button disabled={own<=0||!pr} onClick={()=>sUi(u=>({...u,tr:{type:"sell",did:d.id},tq:""}))} style={{...Z.tb,background:own>0&&pr?"linear-gradient(135deg,#f59e0b,#d97706)":"#0f172a",color:own>0&&pr?"#fff":"#1e293b"}}>SELL</button>
+                </div>
+              );
+            })}
+          </div>
+          {Object.keys(cp.inv).length>0&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginTop:4}}>
+            {Object.entries(cp.inv).filter(([,q])=>q>0).map(([id,q])=>{const d=DRUGS.find(x=>x.id===id);return<span key={id} style={{background:"rgba(255,255,255,0.03)",borderRadius:3,padding:"1px 5px",fontSize:9,color:"#64748b"}}>{d.e}{q}</span>;})}
+          </div>}
+        </div>}
+
+        {/* ── MAP ── */}
+        {ui.tab==="map"&&<div style={{padding:"4px 8px"}}>
+          <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>NEW YORK</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:8}}>
+            {NYC.map(l=>{const cur=l.id===cp.loc;const own=!!cp.terr[l.id];const g=GANGS.find(x=>x.turf.includes(l.id));return(
+              <button key={l.id} onClick={()=>travel(l.id)} disabled={cur} style={{background:cur?`${l.c}15`:own?"rgba(34,197,94,0.04)":`${l.c}06`,border:`1px solid ${cur?l.c+"35":own?"#22c55e22":l.c+"12"}`,borderRadius:5,padding:"6px 3px",textAlign:"center",color:cur?l.c:"#94a3b8",fontSize:10,fontWeight:cur?800:600,cursor:cur?"default":"pointer",opacity:cur?.5:1,fontFamily:"inherit"}}>
+                <div style={{fontSize:14,marginBottom:1}}>{l.e}</div>{l.name}
+                {own&&<div style={{fontSize:7,color:"#22c55e"}}>🏴 Yours</div>}
+                {g&&!own&&<div style={{fontSize:7,color:g.c}}>{g.e}</div>}
+                {l.bank&&<div style={{fontSize:6,color:"#334155"}}>🏦🦈</div>}
+              </button>
+            );})}
+          </div>
+          <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>INTERNATIONAL</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+            {INTL.map(l=>{const ok=cp.rep>=l.rep;const cur=l.id===cp.loc;return(
+              <button key={l.id} onClick={()=>travel(l.id)} disabled={cur||!ok} style={{background:ok?(cur?`${l.c}15`:`${l.c}06`):"rgba(255,255,255,0.01)",border:`1px solid ${ok?l.c+"18":"#ffffff06"}`,borderRadius:5,padding:"6px",textAlign:"center",color:ok?(cur?l.c:"#94a3b8"):"#1e293b",fontSize:10,fontWeight:600,fontFamily:"inherit",cursor:ok&&!cur?"pointer":"default",opacity:ok?(cur?.5:1):.3}}>
+                <span style={{fontSize:14}}>{l.e}</span><div>{l.name}</div>
+                {!ok&&<div style={{fontSize:7,color:"#334155"}}>🔒 {l.rep} rep</div>}
+                {ok&&<div style={{fontSize:7,color:"#475569"}}>✈️ {$(l.fly)} • {l.td}d</div>}
+                {ok&&l.pm&&<div style={{fontSize:6,color:"#334155"}}>{Object.entries(l.pm).map(([d,m])=>`${DRUGS.find(x=>x.id===d)?.e}${Math.round((1-m)*100)}%↓`).join(" ")}</div>}
+              </button>
+            );})}
+          </div>
+          {gs.mode==="2p"&&<button onClick={()=>sGs(p=>({...p,turn:p.turn===1?2:1}))} style={{...Z.pri,width:"100%",marginTop:10,background:"linear-gradient(135deg,#6366f1,#4338ca)"}}>END TURN → P{gs.turn===1?2:1}</button>}
+        </div>}
+
+        {/* ── INTEL ── */}
+        {ui.tab==="intel"&&<div style={{padding:"4px 8px"}}>
+          {/* Rat */}
+          <div style={{marginBottom:6}}>
+            <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>🐀 INFORMANT</div>
+            {cp.rat.hired&&cp.rat.alive?<div style={{background:"rgba(124,58,237,0.04)",border:"1px solid rgba(124,58,237,0.12)",borderRadius:5,padding:6}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#c4b5fd"}}>{cp.rat.name}</span>
+                <span style={{fontSize:9,color:cp.rat.loy>60?"#22c55e":cp.rat.loy>30?"#f59e0b":"#ef4444"}}>{cp.rat.pers} • {cp.rat.loy}%</span>
+              </div>
+              <Bar l="" p={cp.rat.loy} c={cp.rat.loy>60?"#7c3aed":cp.rat.loy>30?"#f59e0b":"#ef4444"}/>
+              <div style={{fontSize:8,color:"#475569",margin:"2px 0"}}>Intel: {"⭐".repeat(cp.rat.intel)} • Tips: {cp.rat.tips}</div>
+              {cp.rat.loy<40&&<div style={{fontSize:9,color:"#ef4444",fontWeight:600,animation:"pulse 2s infinite"}}>⚠️ Might flip!</div>}
+              <button onClick={payRat} disabled={cp.cash<150} style={{...Z.sm,background:"#6d28d9",marginTop:3}}>💰 Pay ($150)</button>
+            </div>:cp.rat.hired?<div style={{fontSize:10,color:"#ef4444",padding:6}}>💀 {cp.rat.name} sold you out.</div>:<div style={{fontSize:10,color:"#334155",padding:6}}>No informant yet.</div>}
+          </div>
+          {/* Territories */}
+          <div style={{marginBottom:6}}>
+            <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>🏴 TERRITORIES</div>
+            {Object.keys(cp.terr).length>0?<div style={{display:"flex",flexDirection:"column",gap:2}}>
+              {Object.entries(cp.terr).map(([id,d])=>{const l=LOCS.find(x=>x.id===id);return<div key={id} style={{display:"flex",justifyContent:"space-between",background:"rgba(34,197,94,0.03)",borderRadius:3,padding:"3px 6px",fontSize:10}}>
+                <span style={{color:"#86efac"}}>{l?.e} {l?.name}</span><span style={{color:"#22c55e",fontWeight:700}}>+{$(d.tr)}/d</span></div>;})}
+              <div style={{fontSize:9,color:"#22c55e",fontWeight:600}}>Total: {$(cp.trib)}/day</div>
+            </div>:<div style={{fontSize:10,color:"#334155"}}>None yet. Build rep.</div>}
+          </div>
+          {/* Gangs */}
+          <div style={{marginBottom:6}}>
+            <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>⚔️ GANGS</div>
+            {GANGS.map(g=><div key={g.id} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 0"}}>
+              <span style={{fontSize:12}}>{g.e}</span>
+              <span style={{fontSize:10,color:g.c,flex:1}}>{g.name}</span>
+              <span style={{fontSize:9,color:cp.gang[g.id]>10?"#22c55e":cp.gang[g.id]<-10?"#ef4444":"#475569",fontWeight:600}}>{cp.gang[g.id]>10?"Allied":cp.gang[g.id]<-10?"Hostile":"Neutral"}</span>
+            </div>)}
+          </div>
+          {/* Milestones */}
+          <div style={{marginBottom:6}}>
+            <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>🏆 MILESTONES</div>
+            <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+              {MILES.map(m=><span key={m.id} style={{fontSize:16,opacity:cp.miles?.includes(m.id)?1:.1,filter:cp.miles?.includes(m.id)?"none":"grayscale(1)",transition:"all .3s"}} title={m.m}>{m.e}</span>)}
+            </div>
+          </div>
+          {/* Log */}
+          <div>
+            <div style={{fontSize:8,color:"#334155",letterSpacing:2,marginBottom:3}}>📜 LOG</div>
+            <div style={{maxHeight:120,overflow:"auto"}}>
+              {[...cp.evs].reverse().slice(0,10).map((e,i)=><div key={i} style={{fontSize:9,padding:"1px 0",color:e.t==="danger"?"#fca5a5":e.t==="spike"?"#f9a8d4":e.t==="crash"?"#86efac":e.t==="tip"?"#c4b5fd":"#475569",opacity:1-i*.06}}>
+                <span style={{color:"#1e293b"}}>D{e.d}</span> {e.m}</div>)}
+            </div>
+          </div>
+        </div>}
+      </div>
+    </div>
+  );
+}
+
+// ── SMALL COMPONENTS ───────────────────────────────────────
+function MS({l,v,c}){return<div style={{background:"rgba(255,255,255,0.02)",borderRadius:3,padding:"3px 4px",textAlign:"center"}}><div style={{fontSize:6,color:"#334155",textTransform:"uppercase",letterSpacing:1}}>{l}</div><div style={{fontSize:11,fontWeight:800,color:c||"#cbd5e1"}}>{v}</div></div>;}
+function Bar({l,p,c}){const pct=Math.min(Math.max(p,0),100);return<div style={{marginBottom:2}}>{l&&<div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#334155",marginBottom:1}}><span>{l}</span><span>{pct}%</span></div>}<div style={{height:4,background:"#0f172a",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c,borderRadius:2,transition:"width .4s",boxShadow:pct>75?`0 0 6px ${c}`:"none"}}/></div></div>;}
+
+// ── STYLES ─────────────────────────────────────────────────
+const Z = {
+  root:{minHeight:"100vh",background:"#060a12",color:"#e2e8f0",fontFamily:"'JetBrains Mono','SF Mono','Fira Code',monospace",display:"flex",justifyContent:"center",padding:0},
+  ctr:{textAlign:"center",padding:"48px 20px",maxWidth:440,margin:"0 auto"},
+  game:{width:"100%",maxWidth:480,margin:"0 auto",paddingBottom:16},
+  hdr:{padding:"8px 12px 6px",background:"linear-gradient(180deg,rgba(255,255,255,0.02),transparent)",borderBottom:"1px solid rgba(255,255,255,0.03)"},
+  pri:{background:"linear-gradient(135deg,#ef4444,#dc2626)",color:"#fff",border:"none",borderRadius:6,padding:"12px 32px",fontSize:14,fontWeight:800,cursor:"pointer",letterSpacing:1,fontFamily:"inherit",boxShadow:"0 4px 20px rgba(239,68,68,0.25)",transition:"all .15s"},
+  ghost:{background:"#111827",color:"#64748b",border:"1px solid #1e293b",borderRadius:6,padding:"10px 18px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"},
+  actBtn:{color:"#fff",border:"none",borderRadius:6,padding:"12px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6},
+  sm:{background:"#1e293b",color:"#cbd5e1",border:"none",borderRadius:3,padding:"4px 8px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"},
+  tb:{border:"none",borderRadius:3,padding:"4px 0",fontSize:9,fontWeight:800,cursor:"pointer",fontFamily:"inherit",transition:"all .1s"},
+  qb:{background:"#111827",color:"#64748b",border:"1px solid #1e293b",borderRadius:3,padding:"4px 8px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"},
+  inp:{background:"#0a0e17",border:"1px solid #1e293b",borderRadius:5,padding:"8px 12px",fontSize:15,color:"#f8fafc",fontFamily:"inherit",textAlign:"center",width:"100%",maxWidth:180,outline:"none",boxSizing:"border-box"},
+};
+
+const CSS = `
+*{box-sizing:border-box;margin:0;padding:0}
+body{margin:0;background:#060a12}
+button:hover{filter:brightness(1.12);transform:translateY(-1px)}
+button:active{transform:translateY(0)}
+input::placeholder{color:#334155}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes si{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
+.shk{animation:sk .4s ease}
+@keyframes sk{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
+`;
