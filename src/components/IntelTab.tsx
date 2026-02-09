@@ -1,15 +1,32 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS } from '../constants/game';
+import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
+
+function getFavorLabel(rel: number): { label: string; color: string } {
+  if (rel >= FAVOR_BLOOD) return { label: 'Blood Brother', color: '#dc2626' };
+  if (rel >= FAVOR_TRUSTED) return { label: 'Trusted', color: '#22c55e' };
+  if (rel >= FAVOR_FRIENDLY) return { label: 'Friendly', color: '#3b82f6' };
+  if (rel >= -5) return { label: 'Neutral', color: '#6b7280' };
+  return { label: 'Hostile', color: '#ef4444' };
+}
+
+function getFavorPerks(tier: number): string[] {
+  const perks: string[] = [];
+  if (tier >= 1) perks.push('10% off consignment');
+  if (tier >= 2) perks.push('-5% cop encounters', '+$3K loan cap');
+  if (tier >= 3) perks.push('No mugging on turf', '+10% sell price');
+  return perks;
+}
 
 export function IntelTab() {
   const { colors } = useTheme();
   const cp = useGameStore(s => s.player);
   const payRatAction = useGameStore(s => s.payRat);
   const payConsignmentAction = useGameStore(s => s.payConsignment);
+  const payGangLoanAction = useGameStore(s => s.payGangLoan);
 
   const pendingTip = cp.rat.pendingTip;
   const tipDrug = pendingTip ? DRUGS.find(d => d.id === pendingTip.drugId) : null;
@@ -134,6 +151,86 @@ export function IntelTab() {
         );
       })()}
 
+      {/* Gang Loan */}
+      {cp.gangLoan && (() => {
+        const loan = cp.gangLoan!;
+        const loanGang = GANGS.find(g => g.id === loan.gangId);
+        const remaining = loan.amountOwed - loan.amountPaid;
+        return (
+          <>
+            <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>GANG LOAN</Text>
+            <View style={{
+              backgroundColor: 'rgba(234,179,8,0.04)', borderWidth: 1, borderColor: 'rgba(234,179,8,0.12)',
+              borderRadius: 8, padding: 10,
+            }}>
+              <Text style={{ fontSize: 14, color: colors.textDim, paddingVertical: 2 }}>Lender: {loanGang?.emoji} {loanGang?.name}</Text>
+              <Text style={{ fontSize: 14, color: colors.textDim, paddingVertical: 2 }}>Owed: {$(remaining)} (of {$(loan.amountOwed)})</Text>
+              <Text style={[
+                { fontSize: 14, paddingVertical: 2 },
+                { color: loan.turnsLeft <= 1 ? colors.red : loan.turnsLeft <= 2 ? colors.yellow : colors.textDim },
+              ]}>
+                Deadline: {loan.turnsLeft > 0 ? `${loan.turnsLeft} turn${loan.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted, paddingVertical: 2 }}>15% compound interest per turn</Text>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                {[1000, 3000].filter(a => a <= remaining).map(amt => (
+                  <TouchableOpacity
+                    key={amt}
+                    style={[
+                      { backgroundColor: '#78350f', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 12 },
+                      cp.cash < amt && { opacity: 0.4 },
+                    ]}
+                    onPress={() => payGangLoanAction(amt)}
+                    disabled={cp.cash < amt}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Pay {$(amt)}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[
+                    { backgroundColor: '#78350f', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 12 },
+                    cp.cash <= 0 && { opacity: 0.4 },
+                  ]}
+                  onPress={() => payGangLoanAction('all')}
+                  disabled={cp.cash <= 0}
+                >
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Pay All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        );
+      })()}
+
+      {/* Active Mission */}
+      {cp.gangMission && (() => {
+        const mission = cp.gangMission!;
+        const mGang = GANGS.find(g => g.id === mission.gangId);
+        const targetLoc = mission.targetLocation ? LOCATIONS.find(l => l.id === mission.targetLocation) : null;
+        return (
+          <>
+            <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>ACTIVE MISSION</Text>
+            <View style={{
+              backgroundColor: 'rgba(99,102,241,0.04)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.12)',
+              borderRadius: 8, padding: 10,
+            }}>
+              <Text style={{ fontSize: 14, color: colors.indigoLight, fontWeight: '600', marginBottom: 4 }}>
+                {mGang?.emoji} {mGang?.name}: {mission.description}
+              </Text>
+              <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                Type: {mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} {'\u2022'} {mission.turnsLeft} turn{mission.turnsLeft !== 1 ? 's' : ''} left
+              </Text>
+              {targetLoc && <Text style={{ fontSize: 13, color: colors.textMuted }}>Target: {targetLoc.emoji} {targetLoc.name}</Text>}
+              {mission.type === 'muscle' && mission.sellTarget && (
+                <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                  Progress: {$(mission.sellProgress || 0)} / {$(mission.sellTarget)}
+                </Text>
+              )}
+            </View>
+          </>
+        );
+      })()}
+
       {/* Fingers */}
       {cp.fingers < 10 && (
         <>
@@ -171,20 +268,52 @@ export function IntelTab() {
         <Text style={{ fontSize: 14, color: colors.textDark }}>None yet. Build rep.</Text>
       )}
 
-      {/* Gangs */}
+      {/* Gangs — expanded cards */}
       <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>GANGS</Text>
-      {GANGS.map(g => (
-        <View key={g.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
-          <Text style={{ fontSize: 16 }}>{g.emoji}</Text>
-          <Text style={{ fontSize: 14, flex: 1, color: g.color }}>{g.name}</Text>
-          <Text style={{
-            fontSize: 13, fontWeight: '600',
-            color: (cp.gangRelations[g.id] ?? 0) > 10 ? colors.green : (cp.gangRelations[g.id] ?? 0) < -10 ? colors.red : colors.textMuted,
+      {GANGS.map(g => {
+        const rel = cp.gangRelations[g.id] ?? 0;
+        const tier = getGangFavorTier(rel);
+        const { label, color: favorColor } = getFavorLabel(rel);
+        const perks = getFavorPerks(tier);
+        const barPercent = Math.max(0, Math.min(100, ((rel + 30) / 55) * 100));
+
+        return (
+          <View key={g.id} style={{
+            backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+            borderRadius: 8, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: g.color,
           }}>
-            {(cp.gangRelations[g.id] ?? 0) > 10 ? 'Allied' : (cp.gangRelations[g.id] ?? 0) < -10 ? 'Hostile' : 'Neutral'}
-          </Text>
-        </View>
-      ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: g.color }}>{g.name}</Text>
+                <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                  Turf: {g.turf.map(t => LOCATIONS.find(l => l.id === t)?.name || t).join(', ')}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: rel > 0 ? colors.green : rel < 0 ? colors.red : colors.textMuted }}>
+                  {rel > 0 ? '+' : ''}{rel}
+                </Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: favorColor }}>{label}</Text>
+              </View>
+            </View>
+            <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+              <View style={{ height: '100%', width: `${barPercent}%`, backgroundColor: favorColor, borderRadius: 2 }} />
+            </View>
+            {perks.length > 0 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                {perks.map((perk, i) => (
+                  <View key={i} style={{
+                    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2,
+                  }}>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>{perk}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        );
+      })}
 
       {/* Milestones */}
       <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>MILESTONES</Text>
@@ -214,6 +343,8 @@ export function IntelTab() {
                 : e.type === 'crash' ? colors.greenLight
                 : e.type === 'tip' ? colors.purpleLight
                 : e.type === 'customs' ? colors.orangeLight
+                : e.type === 'gangLoan' ? '#fbbf24'
+                : e.type === 'mission' ? colors.indigoLight
                 : colors.textMuted,
               opacity: 1 - i * 0.06,
             },

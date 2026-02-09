@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, DRUGS, GANGS, getRegionForLocation, DEFAULT_LAW } from '../constants/game';
+import { $, DRUGS, GANGS, getRegionForLocation, DEFAULT_LAW, getPersonaModifiers } from '../constants/game';
 import { inventoryCount } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
@@ -13,9 +13,11 @@ export function CopScreen() {
 
   const cops = cp.cops!;
   const isBountyHunter = !!cops.bountyHunter;
+  const isGangCollector = !!cops.gangCollector;
   const law = cops.regionLaw || DEFAULT_LAW;
   const bribeCost = cops.bribeCost * cops.count;
   const used = inventoryCount(cp.inventory);
+  const mods = getPersonaModifiers(cp.personaId);
 
   const actionBtn = {
     borderRadius: 8, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center' as const,
@@ -66,9 +68,67 @@ export function CopScreen() {
     );
   }
 
+  if (isGangCollector) {
+    const loan = cops.gangLoan!;
+    const gang = GANGS.find(g => g.id === loan.gangId);
+    const gangName = gang?.name || 'The gang';
+    const remaining = loan.amountOwed - loan.amountPaid;
+    const payAmount = Math.round(remaining * 1.3);
+    const fightChance = Math.round((cp.gun ? 30 : 10) + mods.copFightKillBonus * 100);
+    const gcRunChance = Math.round(30 + mods.copRunChanceBonus * 100);
+
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={{ alignItems: 'center', paddingHorizontal: 24, maxWidth: 500 }}>
+          <Text style={{ fontSize: 56 }}>{'💰'}</Text>
+          <Text style={{ fontSize: 28, fontWeight: '900', color: colors.yellow, marginVertical: 10 }}>GANG COLLECTOR!</Text>
+          <Text style={{ color: colors.redLight, fontSize: 16, marginBottom: 4 }}>
+            {gangName} sent a collector for their money.
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 14, fontStyle: 'italic', marginBottom: 4 }}>
+            You owe {$(remaining)}. They want {$(payAmount)}.
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 15, marginBottom: 20 }}>
+            Cash: {$(cp.cash)} {'\u2022'} HP: {cp.hp}
+          </Text>
+
+          <View style={{ width: 320, gap: 10 }}>
+            <TouchableOpacity
+              style={[
+                actionBtn, { backgroundColor: colors.yellow },
+                cp.cash < payAmount && { backgroundColor: colors.cardBorder, opacity: 0.4 },
+              ]}
+              onPress={() => copAct('bribe')}
+              activeOpacity={0.8}
+              disabled={cp.cash < payAmount}
+            >
+              <Text style={[
+                { color: '#fff', fontSize: 16, fontWeight: '700' },
+                cp.cash < payAmount && { color: colors.textDarkest },
+              ]}>
+                PAY UP <Text style={{ opacity: 0.7 }}>{$(payAmount)}</Text>
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[actionBtn, { backgroundColor: colors.red }]} onPress={() => copAct('fight')} activeOpacity={0.8}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                {cp.gun ? 'FIGHT (armed)' : 'FIGHT (fists)'} <Text style={{ opacity: 0.7 }}>{fightChance}% win</Text>
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[actionBtn, { backgroundColor: colors.blue }]} onPress={() => copAct('run')} activeOpacity={0.8}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                RUN <Text style={{ opacity: 0.7 }}>{gcRunChance}%</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   let runChance = cp.gun ? 55 : 38;
   if (law.behavior === 'corrupt') runChance += 5;
   if (law.behavior === 'methodical') runChance -= 10;
+  runChance += Math.round(mods.copRunChanceBonus * 100);
 
   let flavorText = '';
   if (law.behavior === 'corrupt') flavorText = 'They look willing to deal...';

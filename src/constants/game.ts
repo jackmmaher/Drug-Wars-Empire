@@ -1,4 +1,4 @@
-import type { Drug, Location, Gang, Rank, MarketEvent, Milestone, PlayerState, Region, RegionLaw } from '../types/game';
+import type { Drug, Location, Gang, Rank, MarketEvent, Milestone, PlayerState, Region, RegionLaw, Persona, PersonaModifiers, PersonaId } from '../types/game';
 
 // ── CONFIG ─────────────────────────────────────────────────
 export const DAYS = 30;
@@ -11,6 +11,19 @@ export const HEAT_CAP = 100;
 export const CONSIGNMENT_TURNS = 5;
 export const CONSIGNMENT_MARKUP = 2.0;
 export const STASH_CAPACITY = 50;
+
+// ── GANG LOAN CONSTANTS ──────────────────────────────────
+export const GANG_LOAN_TURNS = 4;
+export const GANG_LOAN_INTEREST = 0.15;
+export const GANG_LOAN_BASE_CAP = 2000;
+export const GANG_LOAN_CAP_PER_REL = 500;
+export const GANG_LOAN_MAX_CAP = 12000;
+export const GANG_LOAN_MIN_RELATIONS = 0;
+
+// ── GANG FAVOR THRESHOLDS ────────────────────────────────
+export const FAVOR_FRIENDLY = 5;
+export const FAVOR_TRUSTED = 15;
+export const FAVOR_BLOOD = 25;
 
 // ── HELPERS ────────────────────────────────────────────────
 export const R = (a: number, b: number) => Math.floor(Math.random() * (b - a + 1)) + a;
@@ -26,11 +39,14 @@ export const $ = (n: number): string => {
 export const DRUGS: Drug[] = [
   { id: 'cocaine', name: 'Cocaine', emoji: '❄️', min: 15000, max: 29000, tier: 3 },
   { id: 'heroin', name: 'Heroin', emoji: '💉', min: 5000, max: 14000, tier: 3 },
+  { id: 'bluesky', name: 'Blue Sky', emoji: '🧊', min: 12000, max: 35000, tier: 4, rare: true, spawnChance: 0.18 },
+  { id: 'opioids', name: 'Opioids', emoji: '☠️', min: 8000, max: 25000, tier: 4, rare: true, spawnChance: 0.22 },
+  { id: 'ozempic', name: 'Ozempic', emoji: '🧬', min: 6000, max: 18000, tier: 4, rare: true, spawnChance: 0.20 },
   { id: 'ecstasy', name: 'Ecstasy', emoji: '💎', min: 2000, max: 8000, tier: 2 },
   { id: 'acid', name: 'Acid', emoji: '🌈', min: 1000, max: 4500, tier: 2 },
   { id: 'weed', name: 'Weed', emoji: '🌿', min: 300, max: 900, tier: 1 },
   { id: 'speed', name: 'Speed', emoji: '⚡', min: 70, max: 250, tier: 1 },
-  { id: 'ludes', name: 'Ludes', emoji: '💊', min: 10, max: 60, tier: 1 },
+  { id: 'ludes', name: 'Quaaludes', emoji: '💊', min: 10, max: 60, tier: 1 },
 ];
 
 // ── LAW PROFILES ─────────────────────────────────────────
@@ -95,23 +111,23 @@ export const REGIONS: Region[] = [
   },
   {
     id: 'colombia', name: 'Colombia', emoji: '🇨🇴', color: '#dc2626',
-    rep: 20, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.3, heroin: 0.8 }, gangId: 'car',
-    law: COLOMBIA_LAW, customsStrictness: 0.15, contraband: ['heroin'],
+    rep: 20, flyCost: 3000, travelDays: 2, priceMultipliers: { cocaine: 0.3, heroin: 0.8, bluesky: 0.6, opioids: 0.5 }, gangId: 'car',
+    law: COLOMBIA_LAW, customsStrictness: 0.15, contraband: ['heroin', 'opioids'],
   },
   {
     id: 'netherlands', name: 'Netherlands', emoji: '🇳🇱', color: '#f97316',
-    rep: 50, flyCost: 5000, travelDays: 2, priceMultipliers: { ecstasy: 0.35, weed: 0.4, acid: 0.5 }, gangId: 'pen',
-    law: NETHERLANDS_LAW, customsStrictness: 0.25, contraband: ['ecstasy', 'weed', 'acid'],
+    rep: 50, flyCost: 5000, travelDays: 2, priceMultipliers: { ecstasy: 0.35, weed: 0.4, acid: 0.5, ozempic: 0.5 }, gangId: 'pen',
+    law: NETHERLANDS_LAW, customsStrictness: 0.25, contraband: ['ecstasy', 'weed', 'acid', 'ozempic'],
   },
   {
     id: 'thailand', name: 'Thailand', emoji: '🇹🇭', color: '#14b8a6',
-    rep: 40, flyCost: 4000, travelDays: 2, priceMultipliers: { heroin: 0.3, speed: 0.35 }, gangId: 'jao',
-    law: THAILAND_LAW, customsStrictness: 0.30, contraband: ['heroin', 'speed'],
+    rep: 40, flyCost: 4000, travelDays: 2, priceMultipliers: { heroin: 0.3, speed: 0.35, opioids: 0.35, bluesky: 0.55 }, gangId: 'jao',
+    law: THAILAND_LAW, customsStrictness: 0.30, contraband: ['heroin', 'speed', 'bluesky', 'opioids'],
   },
   {
     id: 'france', name: 'France', emoji: '🇫🇷', color: '#6366f1',
-    rep: 60, flyCost: 4500, travelDays: 2, priceMultipliers: { heroin: 0.45, cocaine: 0.65 }, gangId: 'cor',
-    law: FRANCE_LAW, customsStrictness: 0.40, contraband: ['cocaine', 'heroin'],
+    rep: 60, flyCost: 4500, travelDays: 2, priceMultipliers: { heroin: 0.45, cocaine: 0.65, ozempic: 0.4 }, gangId: 'cor',
+    law: FRANCE_LAW, customsStrictness: 0.40, contraband: ['cocaine', 'heroin', 'ozempic'],
   },
 ];
 
@@ -218,8 +234,8 @@ export const EVENTS: MarketEvent[] = [
   { message: 'Market flooded with cheap acid!', drugId: 'acid', multiplier: 0.25, type: 'crash', regionId: null },
   { message: 'Weed drought — prices skyrocketed!', drugId: 'weed', multiplier: 3.5, type: 'spike', regionId: null },
   { message: 'Dealers dumping weed everywhere!', drugId: 'weed', multiplier: 0.25, type: 'crash', regionId: null },
-  { message: 'Quaalude factory raided!', drugId: 'ludes', multiplier: 6, type: 'spike', regionId: null },
-  { message: 'Ludes dirt cheap everywhere!', drugId: 'ludes', multiplier: 0.15, type: 'crash', regionId: null },
+  { message: 'Jordan Belfort cleaned out the Quaalude supply!', drugId: 'ludes', multiplier: 6, type: 'spike', regionId: null },
+  { message: 'Warehouse of Quaaludes found! Prices crashing!', drugId: 'ludes', multiplier: 0.15, type: 'crash', regionId: null },
 
   // ── NYC ──
   { message: 'DEA raid in the Bronx! Heroin supply dried up!', drugId: 'heroin', multiplier: 4, type: 'spike', regionId: 'nyc' },
@@ -252,6 +268,24 @@ export const EVENTS: MarketEvent[] = [
   { message: 'Marseille port smuggling ring busted!', drugId: 'cocaine', multiplier: 4, type: 'spike', regionId: 'france' },
   { message: 'Riviera party season — cocaine demand surging!', drugId: 'cocaine', multiplier: 5, type: 'spike', regionId: 'france' },
   { message: 'New pipeline from Morocco — cheap speed!', drugId: 'speed', multiplier: 0.2, type: 'crash', regionId: 'france' },
+
+  // ── Blue Sky ──
+  { message: "A chemistry teacher's lab just flooded the market with Blue Sky!", drugId: 'bluesky', multiplier: 0.3, type: 'crash', regionId: null },
+  { message: 'DEA shut down a superlab! Blue Sky prices through the roof!', drugId: 'bluesky', multiplier: 5, type: 'spike', regionId: null },
+  { message: 'Crystal blue persuasion... Blue Sky demand insane in NYC!', drugId: 'bluesky', multiplier: 6, type: 'spike', regionId: 'nyc' },
+  { message: 'New meth pipeline from Thailand flooding the streets!', drugId: 'bluesky', multiplier: 0.25, type: 'crash', regionId: 'thailand' },
+
+  // ── Opioids ──
+  { message: 'Fentanyl shortage! Street opioid prices skyrocketing!', drugId: 'opioids', multiplier: 5, type: 'spike', regionId: null },
+  { message: 'Pharma warehouse heist! Cheap opioids everywhere!', drugId: 'opioids', multiplier: 0.3, type: 'crash', regionId: null },
+  { message: 'Border seizure failed — opioid shipment got through!', drugId: 'opioids', multiplier: 0.2, type: 'crash', regionId: 'nyc' },
+  { message: 'Crackdown on pill mills! Opioid supply dried up!', drugId: 'opioids', multiplier: 6, type: 'spike', regionId: 'nyc' },
+
+  // ── Ozempic ──
+  { message: 'Hollywood awards season! Everyone wants Ozempic!', drugId: 'ozempic', multiplier: 5, type: 'spike', regionId: null },
+  { message: 'Counterfeit Ozempic flooding the black market!', drugId: 'ozempic', multiplier: 0.25, type: 'crash', regionId: null },
+  { message: 'European pharma shipment diverted — cheap Ozempic!', drugId: 'ozempic', multiplier: 0.2, type: 'crash', regionId: 'netherlands' },
+  { message: 'Influencer endorsement goes viral! Ozempic demand insane!', drugId: 'ozempic', multiplier: 6, type: 'spike', regionId: 'france' },
 ];
 
 // ── RAT NAMES / TYPES ─────────────────────────────────────
@@ -277,10 +311,152 @@ export const MILESTONES: Milestone[] = [
   { id: 'smug', condition: (s) => s.customsEvasions >= 3, label: 'Smuggler', emoji: '🧳' },
   { id: 'debtor', condition: (s) => s.consignment === null && s.fingers < 10, label: 'Scarred', emoji: '✂️' },
   { id: 'dealer', condition: (s) => s.consignmentsCompleted >= 1, label: 'Deal Maker', emoji: '🤝' },
+  { id: 'gangpaid', condition: (s) => s.gangLoansRepaid >= 1, label: 'Loan Shark', emoji: '💸' },
+  { id: 'merc', condition: (s) => s.gangMissionsCompleted >= 1, label: 'Mercenary', emoji: '🎖️' },
+  { id: 'blood', condition: (s) => Object.values(s.gangRelations).some(v => v >= 25), label: 'Blood Brother', emoji: '🩸' },
+  { id: 'rare', condition: (s) => DRUGS.some(d => d.rare && (s.inventory[d.id] || 0) > 0), label: 'Rare Find', emoji: '🌟' },
 ];
 
 export function getRank(rep: number): Rank {
   let r = RANKS[0];
   for (const x of RANKS) if (rep >= x.rep) r = x;
   return r;
+}
+
+// ── GANG FAVOR HELPER ────────────────────────────────────
+export function getGangFavorTier(relations: number): 0 | 1 | 2 | 3 {
+  if (relations >= FAVOR_BLOOD) return 3;
+  if (relations >= FAVOR_TRUSTED) return 2;
+  if (relations >= FAVOR_FRIENDLY) return 1;
+  return 0;
+}
+
+// ── PERSONAS ─────────────────────────────────────────────
+export const DEFAULT_MODIFIERS: PersonaModifiers = {
+  startingCashMultiplier: 1.0,
+  startingDebtMultiplier: 1.0,
+  startingSpaceOffset: 0,
+  startingHP: 100,
+  startingRep: 0,
+  startingGun: false,
+  startingLocation: 'bronx',
+  startingGangRelationOffset: 0,
+  startingGangOverrides: {},
+  preHiredRat: false,
+  ratIntelBonus: 0,
+  heatGainMultiplier: 1.0,
+  heatDecayBonus: 0,
+  repGainMultiplier: 1.0,
+  sellPriceBonus: 0,
+  copRunChanceBonus: 0,
+  copFightKillBonus: 0,
+  fightDamageReduction: 0,
+  bribeCostMultiplier: 1.0,
+  copEncounterReduction: 0,
+  customsEvasionBonus: 0,
+  eventChanceBonus: 0,
+  gangRelGainMultiplier: 1.0,
+  consignmentMarkupMultiplier: 1.0,
+  territoryDiscountMultiplier: 1.0,
+  muggingChanceMultiplier: 1.0,
+};
+
+export const PERSONAS: Persona[] = [
+  {
+    id: 'chemist', name: 'The Chemist', emoji: '🧪',
+    backstory: 'Former chemistry teacher. Knows the product better than anyone — but the street? Not so much.',
+    tagline: '+8% sell, +20 space, high heat',
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      sellPriceBonus: 0.08,
+      startingSpaceOffset: 20,
+      heatGainMultiplier: 1.25,
+      startingGangRelationOffset: -5,
+      startingLocation: 'manhattan',
+    },
+  },
+  {
+    id: 'housewife', name: 'The Housewife', emoji: '👩‍🍳',
+    backstory: 'Suburban mom. Nobody suspects a thing. The PTA money wasn\'t enough.',
+    tagline: '50% less heat, +15% run, less space',
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      heatGainMultiplier: 0.5,
+      copRunChanceBonus: 0.15,
+      customsEvasionBonus: 0.10,
+      startingSpaceOffset: -20,
+      repGainMultiplier: 0.7,
+      startingLocation: 'central_park',
+    },
+  },
+  {
+    id: 'student', name: 'The Student', emoji: '🎓',
+    backstory: 'Engineering sophomore. Student loans aren\'t paying themselves.',
+    tagline: '+30% rep, free rat, less cash',
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      repGainMultiplier: 1.3,
+      preHiredRat: true,
+      ratIntelBonus: 1,
+      eventChanceBonus: 0.05,
+      startingCashMultiplier: 0.5,
+      startingDebtMultiplier: 0.5,
+      startingLocation: 'bronx',
+    },
+  },
+  {
+    id: 'enforcer', name: 'The Enforcer', emoji: '💪',
+    backstory: 'Ex-bouncer. 6\'4", 260 lbs. Debts get paid — one way or another.',
+    tagline: 'Gun + 130HP, combat bonuses',
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      startingGun: true,
+      startingHP: 130,
+      fightDamageReduction: 0.30,
+      copFightKillBonus: 0.10,
+      heatGainMultiplier: 1.15,
+      bribeCostMultiplier: 1.30,
+      sellPriceBonus: -0.05,
+      startingLocation: 'ghetto',
+      startingGangOverrides: { col: 10 },
+    },
+  },
+  {
+    id: 'connected', name: 'The Connected', emoji: '🤵',
+    backstory: 'Third generation. The family name opens doors.',
+    tagline: '+10 gang relations, cheap territory',
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      startingGangRelationOffset: 10,
+      gangRelGainMultiplier: 1.5,
+      consignmentMarkupMultiplier: 0.75,
+      territoryDiscountMultiplier: 0.7,
+      startingRep: 15,
+      startingSpaceOffset: -10,
+      bribeCostMultiplier: 0.7,
+      startingLocation: 'coney',
+    },
+  },
+  {
+    id: 'ghost', name: 'The Ghost', emoji: '🥷',
+    backstory: 'No name. No face. No trace. You were never here.',
+    tagline: 'Zero debt, stealth bonuses, low cash',
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      startingDebtMultiplier: 0,
+      heatDecayBonus: 5,
+      copEncounterReduction: 0.05,
+      customsEvasionBonus: 0.15,
+      startingCashMultiplier: 0.3,
+      repGainMultiplier: 0.6,
+      muggingChanceMultiplier: 1.5,
+      startingLocation: 'brooklyn',
+    },
+  },
+];
+
+export function getPersonaModifiers(id: PersonaId | null): PersonaModifiers {
+  if (!id) return DEFAULT_MODIFIERS;
+  const persona = PERSONAS.find(p => p.id === id);
+  return persona?.modifiers || DEFAULT_MODIFIERS;
 }

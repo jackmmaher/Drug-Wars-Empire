@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, DRUGS, LOCATIONS, STASH_CAPACITY } from '../constants/game';
-import { inventoryCount } from '../lib/game-logic';
+import { $, DRUGS, GANGS, LOCATIONS, STASH_CAPACITY } from '../constants/game';
+import { inventoryCount, getGangLoanCap } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
 export function MarketTab() {
@@ -16,6 +16,8 @@ export function MarketTab() {
   const setSubPanel = useGameStore(s => s.setSubPanel);
   const stashAction = useGameStore(s => s.stashDrug);
   const retrieveAction = useGameStore(s => s.retrieveDrug);
+  const borrowGang = useGameStore(s => s.borrowGang);
+  const payGangLoan = useGameStore(s => s.payGangLoan);
 
   const used = inventoryCount(cp.inventory);
   const free = cp.space - used;
@@ -25,6 +27,9 @@ export function MarketTab() {
   const territory = cp.territories[cp.location];
   const stash: Record<string, number> = territory?.stash || {};
   const stashCount = Object.values(stash).reduce((a, b) => a + b, 0);
+  const localGang = GANGS.find(g => g.turf.includes(cp.location));
+  const canBorrowGang = localGang && !cp.gangLoan && (cp.gangRelations[localGang.id] ?? 0) >= 0;
+  const gangLoanCap = localGang ? getGangLoanCap(cp, localGang.id) : 0;
 
   const smBtn = {
     backgroundColor: colors.cardBorder,
@@ -61,6 +66,58 @@ export function MarketTab() {
               Shark {cp.debt > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.debt)})</Text> : null}
             </Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Gang Loan button */}
+      {localGang && canBorrowGang && gangLoanCap > 0 && (
+        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6 }}>
+          <TouchableOpacity
+            style={[
+              { flex: 1, backgroundColor: 'rgba(234,179,8,0.08)', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 12 },
+              subPanel === 'gl' && { backgroundColor: '#78350f' },
+            ]}
+            onPress={() => setSubPanel('gl')}
+          >
+            <Text style={{ color: '#fbbf24', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+              {localGang.emoji} Gang Loan <Text style={{ opacity: 0.6 }}>(max {$(gangLoanCap)})</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Gang Loan panel */}
+      {subPanel === 'gl' && localGang && canBorrowGang && (
+        <View style={{
+          padding: 10, backgroundColor: 'rgba(234,179,8,0.04)', borderRadius: 6, marginBottom: 6,
+          borderWidth: 1, borderColor: 'rgba(234,179,8,0.12)',
+        }}>
+          <Text style={{ fontSize: 14, color: '#fbbf24', marginBottom: 2 }}>
+            Borrow from {localGang.name} {'\u2022'} 15%/turn interest
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
+            Max: {$(gangLoanCap)} {'\u2022'} 4 turns to repay
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {[1000, 2000, 5000].filter(a => a <= gangLoanCap).map(amt => (
+              <TouchableOpacity
+                key={amt}
+                style={[smBtn, { backgroundColor: '#78350f' }]}
+                onPress={() => borrowGang(localGang!.id, amt)}
+              >
+                <Text style={smBtnText}>+{$(amt)}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[smBtn, { backgroundColor: '#78350f' }]}
+              onPress={() => borrowGang(localGang!.id, gangLoanCap)}
+            >
+              <Text style={smBtnText}>Max ({$(gangLoanCap)})</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 12, color: colors.textDark, marginTop: 6, fontStyle: 'italic' }}>
+            Higher risk than loan shark. Non-payment = consequences.
+          </Text>
         </View>
       )}
 
@@ -142,6 +199,9 @@ export function MarketTab() {
         const hasProfitGlow = pnl !== null && pnl > 30;
         const hasLossGlow = pnl !== null && pnl < -20;
 
+        const isRare = !!d.rare;
+        const isRareAvailable = isRare && !!pr;
+
         return (
           <View key={d.id} style={[
             {
@@ -151,11 +211,19 @@ export function MarketTab() {
             },
             hasProfitGlow && { backgroundColor: colors.bgSuccess, borderLeftColor: colors.green },
             hasLossGlow && { borderLeftColor: colors.red },
+            isRareAvailable && { borderLeftColor: '#d4a017' },
             !pr && { opacity: 0.25 },
           ]}>
             <Text style={{ fontSize: 18, width: 30 }}>{d.emoji}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{d.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{d.name}</Text>
+                {isRareAvailable && (
+                  <View style={{ backgroundColor: '#d4a017', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+                    <Text style={{ fontSize: 9, fontWeight: '900', color: '#000', letterSpacing: 1 }}>RARE</Text>
+                  </View>
+                )}
+              </View>
               {pc !== null && pc !== 0 && (
                 <Text style={{ fontSize: 12, color: pc > 0 ? colors.green : colors.red }}>
                   {pc > 0 ? '\u25B2' : '\u25BC'}{Math.abs(pc).toFixed(0)}%

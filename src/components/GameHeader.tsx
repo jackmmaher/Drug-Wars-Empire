@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, DAYS, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, getRank, getRegionForLocation, getRegion } from '../constants/game';
+import { $, DAYS, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, PERSONAS, getRank, getRegionForLocation, getRegion } from '../constants/game';
 import { inventoryCount, netWorth, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
@@ -23,6 +23,9 @@ export function GameHeader() {
   const isAbroad = region && region.id !== 'nyc';
   const conGang = cp.consignment ? GANGS.find(g => g.id === cp.consignment!.gangId) : null;
   const conLoc = cp.consignment ? LOCATIONS.find(l => l.id === cp.consignment!.originLocation) : null;
+  const persona = cp.personaId ? PERSONAS.find(p => p.id === cp.personaId) : null;
+  const loanGang = cp.gangLoan ? GANGS.find(g => g.id === cp.gangLoan!.gangId) : null;
+  const missionGang = cp.gangMission ? GANGS.find(g => g.id === cp.gangMission!.gangId) : null;
 
   return (
     <View>
@@ -89,6 +92,7 @@ export function GameHeader() {
           <Text style={{ fontSize: 13, color: colors.green, fontWeight: '600' }}>+{$(cp.territories[cp.location].tribute)}/d</Text>
         )}
         <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          {persona && <Text style={{ fontSize: 16 }}>{persona.emoji}</Text>}
           {cp.gun && <Text style={{ fontSize: 16 }}>🔫</Text>}
           {cp.rat.hired && cp.rat.alive && <Text style={{ fontSize: 16 }}>🐀</Text>}
           {Object.keys(cp.territories).length > 0 && (
@@ -134,6 +138,36 @@ export function GameHeader() {
             color: cp.consignment.turnsLeft <= 1 ? colors.red : colors.yellow,
           }}>
             Owe {conGang.name} {$(cp.consignment.amountOwed - cp.consignment.amountPaid)} {'\u2022'} {cp.consignment.turnsLeft > 0 ? `${cp.consignment.turnsLeft} turn${cp.consignment.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'} {'\u2022'} Return to {conLoc?.name || '???'}
+          </Text>
+        </View>
+      )}
+
+      {/* Gang Loan status bar */}
+      {cp.gangLoan && loanGang && (
+        <View style={[
+          {
+            marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+            borderRadius: 6, backgroundColor: 'rgba(234,179,8,0.06)', borderWidth: 1, borderColor: 'rgba(234,179,8,0.15)',
+          },
+          cp.gangLoan.turnsLeft <= 1 && { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' },
+        ]}>
+          <Text style={{
+            fontSize: 14, fontWeight: '600',
+            color: cp.gangLoan.turnsLeft <= 1 ? colors.red : '#fbbf24',
+          }}>
+            {loanGang.emoji} Loan: {$(cp.gangLoan.amountOwed - cp.gangLoan.amountPaid)} {'\u2022'} {cp.gangLoan.turnsLeft > 0 ? `${cp.gangLoan.turnsLeft} turn${cp.gangLoan.turnsLeft !== 1 ? 's' : ''}` : 'OVERDUE!'} {'\u2022'} 15%/turn
+          </Text>
+        </View>
+      )}
+
+      {/* Mission status bar */}
+      {cp.gangMission && missionGang && (
+        <View style={{
+          marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+          borderRadius: 6, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)',
+        }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.indigoLight }}>
+            {missionGang.emoji} Mission: {cp.gangMission.description} {'\u2022'} {cp.gangMission.turnsLeft} turn{cp.gangMission.turnsLeft !== 1 ? 's' : ''}
           </Text>
         </View>
       )}
@@ -253,6 +287,14 @@ function OfferBanner() {
     const conDrug = DRUGS.find(d => d.id === o.drugId);
     offerText = `${conGang?.name} offers ${o.quantity} ${conDrug?.emoji} ${conDrug?.name} on consignment -- owe ${$(o.amountOwed!)} in 5 turns`;
     isFree = true;
+  } else if (o.type === 'mission' && o.mission) {
+    const mGang = GANGS.find(g => g.id === o.gangId);
+    offerText = `${mGang?.emoji || '🎖️'} ${mGang?.name} mission: ${o.mission.description}`;
+    if (o.mission.type === 'tribute' && o.mission.cashAmount) {
+      offerCost = o.mission.cashAmount;
+    } else {
+      isFree = true;
+    }
   }
 
   let returnCostWarning: React.ReactNode = null;

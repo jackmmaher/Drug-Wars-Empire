@@ -18,6 +18,8 @@ export interface Drug {
   min: number;
   max: number;
   tier: number;
+  rare?: boolean;
+  spawnChance?: number; // 0-1, default 0.88
 }
 
 export interface RegionLaw {
@@ -110,10 +112,12 @@ export interface CopEncounter {
   regionLaw: RegionLaw;
   bountyHunter?: boolean;
   consignment?: Consignment;
+  gangCollector?: boolean;
+  gangLoan?: GangLoan;
 }
 
 export interface Offer {
-  type: 'gun' | 'coat' | 'rat' | 'territory' | 'consignment';
+  type: 'gun' | 'coat' | 'rat' | 'territory' | 'consignment' | 'mission';
   price?: number;
   space?: number;
   rat?: Rat;
@@ -125,6 +129,7 @@ export interface Offer {
   amountOwed?: number;
   originLocation?: string;
   gangId?: string;
+  mission?: GangMission;
 }
 
 export interface Territory {
@@ -145,7 +150,7 @@ export interface NearMiss {
 export interface EventLog {
   day: number;
   message: string;
-  type: 'info' | 'danger' | 'spike' | 'crash' | 'tip' | 'customs' | 'consignment';
+  type: 'info' | 'danger' | 'spike' | 'crash' | 'tip' | 'customs' | 'consignment' | 'gangLoan' | 'mission';
 }
 
 export interface Forecast {
@@ -157,6 +162,73 @@ export interface RecentSold {
   id: string;
   price: number;
   qty: number;
+}
+
+// ── Persona Types ────────────────────────────────────────
+export type PersonaId = 'chemist' | 'housewife' | 'student' | 'enforcer' | 'connected' | 'ghost';
+
+export interface PersonaModifiers {
+  startingCashMultiplier: number;
+  startingDebtMultiplier: number;
+  startingSpaceOffset: number;
+  startingHP: number;
+  startingRep: number;
+  startingGun: boolean;
+  startingLocation: string;
+  startingGangRelationOffset: number;
+  startingGangOverrides: Record<string, number>;
+  preHiredRat: boolean;
+  ratIntelBonus: number;
+  heatGainMultiplier: number;
+  heatDecayBonus: number;
+  repGainMultiplier: number;
+  sellPriceBonus: number;
+  copRunChanceBonus: number;
+  copFightKillBonus: number;
+  fightDamageReduction: number;
+  bribeCostMultiplier: number;
+  copEncounterReduction: number;
+  customsEvasionBonus: number;
+  eventChanceBonus: number;
+  gangRelGainMultiplier: number;
+  consignmentMarkupMultiplier: number;
+  territoryDiscountMultiplier: number;
+  muggingChanceMultiplier: number;
+}
+
+export interface Persona {
+  id: PersonaId;
+  name: string;
+  emoji: string;
+  backstory: string;
+  tagline: string;
+  modifiers: PersonaModifiers;
+}
+
+// ── Gang Loan Types ──────────────────────────────────────
+export interface GangLoan {
+  gangId: string;
+  principal: number;
+  amountOwed: number;
+  amountPaid: number;
+  turnsLeft: number;
+  originLocation: string;
+  interestRate: number;
+}
+
+// ── Gang Mission Types ───────────────────────────────────
+export interface GangMission {
+  type: 'delivery' | 'tribute' | 'muscle' | 'supply';
+  gangId: string;
+  description: string;
+  targetLocation?: string;
+  drugId?: string;
+  quantity?: number;
+  cashAmount?: number;
+  turnsLeft: number;
+  originLocation: string;
+  sellTarget?: number;
+  sellProgress?: number;
 }
 
 export interface PlayerState {
@@ -200,6 +272,11 @@ export interface PlayerState {
   fingers: number;
   consignmentsCompleted: number;
   forecast: Forecast | null;
+  personaId: PersonaId | null;
+  gangLoan: GangLoan | null;
+  gangLoansRepaid: number;
+  gangMission: GangMission | null;
+  gangMissionsCompleted: number;
 }
 
 export type GamePhase = 'title' | 'playing' | 'cop' | 'win' | 'end';

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, MILESTONES, DAYS, getRank } from '../constants/game';
+import { $, MILESTONES, DAYS, getRank, PERSONAS } from '../constants/game';
 import { netWorth } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { submitScore, fetchLeaderboard, type ScoreEntry } from '../lib/leaderboard';
@@ -20,6 +20,7 @@ export function EndScreen() {
   const isWin = phase === 'win';
   const fn = cp.cash + cp.bank - cp.debt;
   const fr = getRank(cp.rep);
+  const persona = cp.personaId ? PERSONAS.find(p => p.id === cp.personaId) : null;
 
   React.useEffect(() => {
     const run = async () => {
@@ -56,6 +57,7 @@ export function EndScreen() {
     { label: 'HP', value: `${cp.hp}%` },
     { label: 'Milestones', value: cp.milestones?.length || 0 },
     { label: 'Days', value: Math.min(cp.day - 1, DAYS) },
+    { label: 'Persona', value: persona ? persona.name : 'Classic' },
   ];
 
   return (
@@ -67,6 +69,9 @@ export function EndScreen() {
         </Text>
 
         <Text style={{ fontSize: 17, color: colors.yellow, fontWeight: '800' }}>{fr.name}</Text>
+        {persona && (
+          <Text style={{ fontSize: 14, color: colors.textDim, marginTop: 2 }}>{persona.emoji} {persona.name}</Text>
+        )}
         <Text style={{ fontSize: 30, fontWeight: '900', color: colors.white, marginVertical: 8 }}>Net: {$(fn)}</Text>
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, maxWidth: 500, marginBottom: 20 }}>

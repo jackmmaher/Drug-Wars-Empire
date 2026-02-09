@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { PlayerState, GamePhase, TabId, TradeInfo } from '../types/game';
+import type { PlayerState, GamePhase, TabId, TradeInfo, PersonaId } from '../types/game';
 import {
   createPlayerState, travel as travelLogic, executeTrade, copAction,
   handleOffer, bankAction, payShark, borrowShark, payRat as payRatLogic,
   payConsignment as payConsignmentLogic,
+  borrowFromGang as borrowFromGangLogic, payGangLoan as payGangLoanLogic,
   stashDrug as stashDrugLogic, retrieveDrug as retrieveDrugLogic,
   inventoryCount, netWorth, checkMilestones, effectiveSpace,
   type SideEffect,
@@ -22,6 +23,7 @@ interface GameStore {
   phase: GamePhase;
   player: PlayerState;
   playerName: string;
+  selectedPersona: PersonaId | null;
 
   // UI state
   activeTab: TabId;
@@ -44,6 +46,7 @@ interface GameStore {
   currentNetWorth: () => number;
 
   // Actions
+  setSelectedPersona: (persona: PersonaId | null) => void;
   startGame: (difficulty?: 'conservative' | 'standard' | 'highroller') => void;
   travel: (locationId: string) => void;
   openTrade: (drugId: string, type: 'buy' | 'sell') => void;
@@ -57,6 +60,8 @@ interface GameStore {
   shark: (amount: number | 'all') => void;
   borrow: (amount: number) => void;
   payConsignment: (amount: number | 'all') => void;
+  borrowGang: (gangId: string, amount: number) => void;
+  payGangLoan: (amount: number | 'all') => void;
   stashDrug: (drugId: string, qty: number) => void;
   retrieveDrug: (drugId: string, qty: number) => void;
   payRat: () => void;
@@ -77,6 +82,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'title',
   player: createPlayerState(),
   playerName: '',
+  selectedPersona: null,
 
   activeTab: 'market',
   activeTrade: null,
@@ -99,10 +105,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentNetWorth: () => netWorth(get().player),
 
   // Actions
+  setSelectedPersona: (persona) => set({ selectedPersona: persona }),
+
   startGame: (difficulty = 'standard') => {
+    const persona = get().selectedPersona;
     set({
       phase: 'playing',
-      player: createPlayerState('bronx', difficulty),
+      player: createPlayerState('bronx', difficulty, persona),
       activeTab: 'market',
       subPanel: null,
     });
@@ -197,6 +206,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ player: result.player });
   },
 
+  borrowGang: (gangId, amount) => {
+    const result = borrowFromGangLogic(get().player, gangId, amount);
+    processEffects(result.effects, set);
+    set({ player: result.player });
+  },
+
+  payGangLoan: (amount) => {
+    const result = payGangLoanLogic(get().player, amount);
+    processEffects(result.effects, set);
+    set({ player: result.player });
+  },
+
   stashDrug: (drugId, qty) => {
     const result = stashDrugLogic(get().player, drugId, qty);
     processEffects(result.effects, set);
@@ -243,6 +264,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       notifications: [],
       hasSeenRules: s.hasSeenRules,
       playerName: s.playerName,
+      selectedPersona: null,
       travelCount: 0,
       showingAd: false,
     }));
