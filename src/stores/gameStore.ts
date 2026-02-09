@@ -1,11 +1,10 @@
 import { create } from 'zustand';
-import type { PlayerState, GamePhase, GameMode, TabId, TradeInfo, Offer, SharedMarket } from '../types/game';
+import type { PlayerState, GamePhase, TabId, TradeInfo } from '../types/game';
 import {
   createPlayerState, travel as travelLogic, executeTrade, copAction,
   handleOffer, bankAction, payShark, borrowShark, payRat as payRatLogic,
   payConsignment as payConsignmentLogic,
   stashDrug as stashDrugLogic, retrieveDrug as retrieveDrugLogic,
-  generateSharedMarket, isLocationOwnedByRival,
   inventoryCount, netWorth, checkMilestones, effectiveSpace,
   type SideEffect,
 } from '../lib/game-logic';
@@ -20,13 +19,9 @@ interface Notification {
 
 interface GameStore {
   // Game state
-  mode: GameMode;
   phase: GamePhase;
-  turn: number;
   player: PlayerState;
-  p1: PlayerState | null;
-  p2: PlayerState | null;
-  sharedMarket: SharedMarket | null;
+  playerName: string;
 
   // UI state
   activeTab: TabId;
@@ -35,9 +30,13 @@ interface GameStore {
   isShaking: boolean;
   subPanel: string | null;
   notifications: Notification[];
+  hasSeenRules: boolean;
+
+  // Ad state
+  travelCount: number;
+  showingAd: boolean;
 
   // Computed helpers
-  currentPlayer: () => PlayerState;
   usedSpace: () => number;
   freeSpace: () => number;
   currentLocation: () => typeof LOCATIONS[0] | undefined;
@@ -45,7 +44,7 @@ interface GameStore {
   currentNetWorth: () => number;
 
   // Actions
-  startGame: (mode: GameMode, difficulty?: 'conservative' | 'standard' | 'highroller') => void;
+  startGame: (difficulty?: 'conservative' | 'standard' | 'highroller') => void;
   travel: (locationId: string) => void;
   openTrade: (drugId: string, type: 'buy' | 'sell') => void;
   setTradeQuantity: (qty: string) => void;
@@ -63,7 +62,9 @@ interface GameStore {
   payRat: () => void;
   setTab: (tab: TabId) => void;
   setSubPanel: (panel: string | null) => void;
-  endTurn: () => void;
+  setPlayerName: (name: string) => void;
+  dismissRules: () => void;
+  dismissAd: () => void;
   resetToTitle: () => void;
   notify: (message: string, type?: string) => void;
   clearNotifications: () => void;
@@ -73,13 +74,9 @@ let notifyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const useGameStore = create<GameStore>((set, get) => ({
   // Initial state
-  mode: 'solo',
   phase: 'title',
-  turn: 1,
   player: createPlayerState(),
-  p1: null,
-  p2: null,
-  sharedMarket: null,
+  playerName: '',
 
   activeTab: 'market',
   activeTrade: null,
@@ -87,66 +84,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isShaking: false,
   subPanel: null,
   notifications: [],
+  hasSeenRules: false,
+  travelCount: 0,
+  showingAd: false,
 
   // Computed
-  currentPlayer: () => {
-    const s = get();
-    if (s.mode === '2p') return s.turn === 1 ? s.p1! : s.p2!;
-    return s.player;
-  },
-  usedSpace: () => inventoryCount(get().currentPlayer().inventory),
+  usedSpace: () => inventoryCount(get().player.inventory),
   freeSpace: () => {
-    const cp = get().currentPlayer();
-    return effectiveSpace(cp) - inventoryCount(cp.inventory);
+    const p = get().player;
+    return effectiveSpace(p) - inventoryCount(p.inventory);
   },
-  currentLocation: () => {
-    const cp = get().currentPlayer();
-    return LOCATIONS.find(l => l.id === cp.location);
-  },
-  currentRank: () => getRank(get().currentPlayer().rep),
-  currentNetWorth: () => netWorth(get().currentPlayer()),
+  currentLocation: () => LOCATIONS.find(l => l.id === get().player.location),
+  currentRank: () => getRank(get().player.rep),
+  currentNetWorth: () => netWorth(get().player),
 
   // Actions
-  startGame: (mode, difficulty = 'standard') => {
-    if (mode === '2p') {
-      const initialMarket = generateSharedMarket(1);
-      const p1 = createPlayerState('bronx', difficulty);
-      const p2 = createPlayerState('brooklyn', difficulty);
-      // Apply shared market prices to both players' starting locations
-      p1.prices = initialMarket.prices['bronx'] || p1.prices;
-      p1.currentEvent = initialMarket.regionEvents['nyc'] || null;
-      p2.prices = initialMarket.prices['brooklyn'] || p2.prices;
-      p2.currentEvent = initialMarket.regionEvents['nyc'] || null;
-      set({
-        mode: '2p',
-        phase: 'playing',
-        turn: 1,
-        p1,
-        p2,
-        player: createPlayerState(),
-        activeTab: 'market',
-        subPanel: null,
-        sharedMarket: initialMarket,
-      });
-    } else {
-      set({
-        mode: 'solo',
-        phase: 'playing',
-        turn: 1,
-        player: createPlayerState('bronx', difficulty),
-        p1: null,
-        p2: null,
-        activeTab: 'market',
-        subPanel: null,
-        sharedMarket: null,
-      });
-    }
+  startGame: (difficulty = 'standard') => {
+    set({
+      phase: 'playing',
+      player: createPlayerState('bronx', difficulty),
+      activeTab: 'market',
+      subPanel: null,
+    });
   },
 
   travel: (locationId) => {
     const s = get();
-    const cp = s.currentPlayer();
-    const result = travelLogic(cp, locationId);
+    const result = travelLogic(s.player, locationId);
 
     // Process side effects
     processEffects(result.effects, set);
@@ -156,37 +120,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().notify(n.message, n.type);
     }
 
-    if (result.notifications.length > 0 && result.player === cp) return;
+    if (result.notifications.length > 0 && result.player === s.player) return;
 
-    // In 2P mode, override prices from shared market for the destination
-    if (s.mode === '2p' && s.sharedMarket) {
-      const destPrices = s.sharedMarket.prices[result.player.location];
-      if (destPrices) {
-        result.player = { ...result.player, prices: destPrices };
-        const region = LOCATIONS.find(l => l.id === result.player.location)?.region;
-        if (region && s.sharedMarket.regionEvents[region]) {
-          result.player.currentEvent = s.sharedMarket.regionEvents[region];
-        }
-      }
-    }
+    // Increment travel counter for ad interstitial timing
+    const newTravelCount = s.travelCount + 1;
+    const shouldShowAd = newTravelCount > 0 && newTravelCount % 5 === 0
+      && result.phase === 'playing'; // No ads before cop encounters or game end
 
-    if (s.mode === '2p') {
-      const key = s.turn === 1 ? 'p1' : 'p2';
-      // Handle 2P end-of-game
-      if (result.phase === 'end' || result.phase === 'win') {
-        const otherKey = s.turn === 1 ? 'p2' : 'p1';
-        const other = s[otherKey as 'p1' | 'p2']!;
-        if (result.player.day > DAYS && other.day > DAYS) {
-          set({ [key]: result.player, phase: 'end' } as any);
-        } else {
-          set({ [key]: result.player, turn: s.turn === 1 ? 2 : 1, phase: 'playing' } as any);
-        }
-      } else {
-        set({ [key]: result.player, phase: result.phase } as any);
-      }
-    } else {
-      set({ player: result.player, phase: result.phase });
-    }
+    set({ player: result.player, phase: result.phase, travelCount: newTravelCount, showingAd: shouldShowAd });
   },
 
   openTrade: (drugId, type) => {
@@ -198,124 +139,82 @@ export const useGameStore = create<GameStore>((set, get) => ({
   confirmTrade: () => {
     const s = get();
     if (!s.activeTrade) return;
-    const cp = s.currentPlayer();
     const drug = DRUGS.find(d => d.id === s.activeTrade!.drugId)!;
-    const price = cp.prices[drug.id] as number;
+    const price = s.player.prices[drug.id] as number;
     if (!price) return;
 
-    const used = inventoryCount(cp.inventory);
-    const free = effectiveSpace(cp) - used;
-    const own = cp.inventory[drug.id] || 0;
-    const maxBuy = Math.min(Math.floor(cp.cash / price), free);
+    const used = inventoryCount(s.player.inventory);
+    const free = effectiveSpace(s.player) - used;
+    const own = s.player.inventory[drug.id] || 0;
+    const maxBuy = Math.min(Math.floor(s.player.cash / price), free);
     const maxQty = s.activeTrade!.type === 'buy' ? maxBuy : own;
     const qty = s.tradeQuantity === 'max' ? maxQty : Math.min(parseInt(s.tradeQuantity) || 0, maxQty);
 
     if (qty <= 0) return;
 
-    const result = executeTrade(cp, drug.id, s.activeTrade!.type, qty);
+    const result = executeTrade(s.player, drug.id, s.activeTrade!.type, qty);
     processEffects(result.effects, set);
-
-    if (s.mode === '2p') {
-      const key = s.turn === 1 ? 'p1' : 'p2';
-      set({ [key]: result.player, activeTrade: null, tradeQuantity: '' } as any);
-    } else {
-      set({ player: result.player, activeTrade: null, tradeQuantity: '' });
-    }
+    set({ player: result.player, activeTrade: null, tradeQuantity: '' });
   },
 
   closeTrade: () => set({ activeTrade: null, tradeQuantity: '' }),
 
   copAct: (action) => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = copAction(cp, action);
+    const result = copAction(get().player, action);
     processEffects(result.effects, set);
-
-    if (s.mode === '2p') {
-      const key = s.turn === 1 ? 'p1' : 'p2';
-      set({ [key]: result.player, phase: result.phase } as any);
-    } else {
-      set({ player: result.player, phase: result.phase });
-    }
+    set({ player: result.player, phase: result.phase });
   },
 
   acceptOffer: () => {
-    const s = get();
-    const cp = s.currentPlayer();
-
-    // Territory exclusivity check in 2P mode
-    if (s.mode === '2p' && cp.offer?.type === 'territory') {
-      const rival = s.turn === 1 ? s.p2 : s.p1;
-      if (isLocationOwnedByRival(rival, cp.offer.locationId!)) {
-        get().notify('Rival already controls this territory!', 'danger');
-        return;
-      }
-    }
-
-    const result = handleOffer(cp, true);
+    const result = handleOffer(get().player, true);
     processEffects(result.effects, set);
-    updatePlayer(s, result.player, set);
+    set({ player: result.player });
   },
 
   declineOffer: () => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = handleOffer(cp, false);
-    updatePlayer(s, result.player, set);
+    const result = handleOffer(get().player, false);
+    set({ player: result.player });
   },
 
   bank: (action, amount) => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = bankAction(cp, action, amount);
-    updatePlayer(s, result, set);
+    const result = bankAction(get().player, action, amount);
+    set({ player: result });
   },
 
   shark: (amount) => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = payShark(cp, amount);
-    updatePlayer(s, result, set);
+    const result = payShark(get().player, amount);
+    set({ player: result });
   },
 
   borrow: (amount) => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = borrowShark(cp, amount);
-    updatePlayer(s, result, set);
+    const result = borrowShark(get().player, amount);
+    set({ player: result });
   },
 
   payConsignment: (amount) => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = payConsignmentLogic(cp, amount);
+    const result = payConsignmentLogic(get().player, amount);
     processEffects(result.effects, set);
-    updatePlayer(s, result.player, set);
+    set({ player: result.player });
   },
 
   stashDrug: (drugId, qty) => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = stashDrugLogic(cp, drugId, qty);
+    const result = stashDrugLogic(get().player, drugId, qty);
     processEffects(result.effects, set);
-    updatePlayer(s, result.player, set);
+    set({ player: result.player });
   },
 
   retrieveDrug: (drugId, qty) => {
-    const s = get();
-    const cp = s.currentPlayer();
-    const result = retrieveDrugLogic(cp, drugId, qty);
+    const result = retrieveDrugLogic(get().player, drugId, qty);
     processEffects(result.effects, set);
-    updatePlayer(s, result.player, set);
+    set({ player: result.player });
   },
 
   payRat: () => {
     const s = get();
-    const cp = s.currentPlayer();
-    const result = payRatLogic(cp);
+    const result = payRatLogic(s.player);
     processEffects(result.effects, set);
-    updatePlayer(s, result.player, set);
-    if (result.player !== cp) {
+    set({ player: result.player });
+    if (result.player !== s.player) {
       if (result.tipGenerated) {
         get().notify('Loyalty boosted. Got a tip!', 'info');
       } else {
@@ -327,40 +226,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setTab: (tab) => set({ activeTab: tab, subPanel: null }),
   setSubPanel: (panel) => set(s => ({ subPanel: s.subPanel === panel ? null : panel })),
 
-  endTurn: () => {
-    const s = get();
-    if (s.mode === '2p') {
-      const nextTurn = s.turn === 1 ? 2 : 1;
+  setPlayerName: (name) => set({ playerName: name }),
 
-      // When cycling back to P1, advance the shared market day
-      if (nextTurn === 1 && s.sharedMarket) {
-        const nextDay = s.sharedMarket.day + 1;
-        const newMarket = generateSharedMarket(nextDay);
-        set({
-          turn: nextTurn,
-          sharedMarket: { ...newMarket, day: nextDay },
-        });
-      } else {
-        set({ turn: nextTurn });
-      }
-    }
-  },
+  dismissRules: () => set({ hasSeenRules: true }),
+
+  dismissAd: () => set({ showingAd: false }),
 
   resetToTitle: () => {
-    set({
-      mode: 'solo',
+    set(s => ({
       phase: 'title',
-      turn: 1,
       player: createPlayerState(),
-      p1: null,
-      p2: null,
-      sharedMarket: null,
       activeTab: 'market',
       activeTrade: null,
       tradeQuantity: '',
       subPanel: null,
       notifications: [],
-    });
+      hasSeenRules: s.hasSeenRules,
+      playerName: s.playerName,
+      travelCount: 0,
+      showingAd: false,
+    }));
   },
 
   notify: (message, type = 'info') => {
@@ -376,17 +261,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   clearNotifications: () => set({ notifications: [] }),
 }));
 
-// Helper to update player state correctly for both modes
-function updatePlayer(state: GameStore, player: PlayerState, set: any) {
-  if (state.mode === '2p') {
-    const key = state.turn === 1 ? 'p1' : 'p2';
-    set({ [key]: player });
-  } else {
-    set({ player });
-  }
-}
-
-// Process effects (shake + audio/haptics)
+// Process effects (shake + audio)
 function processEffects(effects: SideEffect[], set: any) {
   const hasShake = effects.some(e => e.type === 'shake');
   if (hasShake) {

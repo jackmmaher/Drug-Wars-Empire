@@ -1,16 +1,14 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { colors } from '../constants/theme';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 import { $, GANGS, DRUGS, REGIONS, LOCATIONS, getRegionForLocation, getRegionLocations } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 import { inventoryCount } from '../lib/game-logic';
 
 export function MapTab() {
-  const cp = useGameStore(s => s.currentPlayer());
-  const mode = useGameStore(s => s.mode);
-  const turn = useGameStore(s => s.turn);
+  const { colors } = useTheme();
+  const cp = useGameStore(s => s.player);
   const travelAction = useGameStore(s => s.travel);
-  const endTurn = useGameStore(s => s.endTurn);
 
   const currentRegion = getRegionForLocation(cp.location);
   const regionLocs = currentRegion ? getRegionLocations(currentRegion.id) : [];
@@ -20,25 +18,20 @@ export function MapTab() {
   const conOverdue = cp.consignment && cp.consignment.turnsLeft <= 0;
   const forecast = cp.forecast;
 
-  const rival = useGameStore(s => {
-    if (s.mode !== '2p') return null;
-    return s.turn === 1 ? s.p2 : s.p1;
-  });
-
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 }}>
       {/* Current Region */}
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={styles.sectionLabel}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+        <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, fontWeight: '600' }}>
           {currentRegion?.emoji} {currentRegion?.name?.toUpperCase() || 'NEW YORK'}
         </Text>
         {forecast && forecast.regionId === currentRegion?.id && (
-          <Text style={{ fontSize: 8, color: forecast.type === 'spike' ? '#f59e0b' : '#14b8a6', marginLeft: 6 }}>
-            {forecast.type === 'spike' ? '\ud83d\udcc8 Rumors...' : '\ud83d\udcc9 Whispers...'}
+          <Text style={{ fontSize: 13, color: forecast.type === 'spike' ? colors.yellow : colors.teal, marginLeft: 8 }}>
+            {forecast.type === 'spike' ? 'Rumors...' : 'Whispers...'}
           </Text>
         )}
       </View>
-      <View style={styles.nycGrid}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
         {regionLocs.map(l => {
           const cur = l.id === cp.location;
           const own = !!cp.territories[l.id];
@@ -49,40 +42,43 @@ export function MapTab() {
               onPress={() => travelAction(l.id)}
               disabled={cur}
               style={[
-                styles.locBtn,
-                { borderColor: cur ? l.color + '35' : own ? '#22c55e22' : conOrigin === l.id ? (conOverdue ? '#ef444440' : '#eab30840') : l.color + '12' },
-                cur && { backgroundColor: l.color + '15' },
+                {
+                  width: '31%', borderWidth: 1, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 6,
+                  alignItems: 'center',
+                  borderColor: cur ? l.color + '35' : own ? '#22c55e22' : conOrigin === l.id ? (conOverdue ? '#ef444440' : '#eab30840') : l.color + '12',
+                },
+                cur && { backgroundColor: l.color + '15', opacity: 0.5 },
                 own && !cur && { backgroundColor: 'rgba(34,197,94,0.04)' },
                 conOrigin === l.id && !cur && { backgroundColor: conOverdue ? 'rgba(239,68,68,0.06)' : 'rgba(234,179,8,0.06)' },
                 !cur && !own && conOrigin !== l.id && { backgroundColor: l.color + '06' },
-                cur && { opacity: 0.5 },
               ]}
               activeOpacity={0.7}
             >
-              <Text style={styles.locEmoji}>{l.emoji}</Text>
-              <Text style={[styles.locName, cur && { color: l.color, fontWeight: '800' }]}>{l.name}</Text>
-              {own && <Text style={styles.ownedLabel}>🏴 Yours</Text>}
-              {rival?.territories[l.id] && <Text style={styles.rivalLabel}>Rival</Text>}
-              {g && !own && !rival?.territories[l.id] && <Text style={[styles.gangLabel, { color: g.color }]}>{g.emoji}</Text>}
+              <Text style={{ fontSize: 20, marginBottom: 2 }}>{l.emoji}</Text>
+              <Text style={[
+                { fontSize: 14, fontWeight: '600', color: colors.textDim, textAlign: 'center' },
+                cur && { color: l.color, fontWeight: '800' },
+              ]}>{l.name}</Text>
+              {own && <Text style={{ fontSize: 12, color: colors.green }}>Yours</Text>}
+              {g && !own && <Text style={{ fontSize: 12, color: g.color }}>{g.emoji}</Text>}
               {conOrigin === l.id && (
-                <Text style={[styles.returnLabel, conOverdue && { color: colors.red }]}>📍 Return here</Text>
+                <Text style={[{ fontSize: 11, fontWeight: '700', color: colors.yellow }, conOverdue && { color: colors.red }]}>Return here</Text>
               )}
-              {l.bank && <Text style={styles.serviceLabel}>🏦🦈</Text>}
+              {l.bank && <Text style={{ fontSize: 11, color: colors.textDim }}>Bank/Shark</Text>}
             </TouchableOpacity>
           );
         })}
       </View>
 
       {/* Fly To */}
-      <Text style={styles.sectionLabel}>✈️ FLY TO</Text>
-      <View style={styles.intlGrid}>
+      <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginBottom: 6, fontWeight: '600' }}>FLY TO</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {otherRegions.map(r => {
           const isNyc = r.id === 'nyc';
           const flyCost = isNyc ? Math.round((currentRegion?.flyCost || 0) / 2) : r.flyCost;
           const repNeeded = isNyc ? 0 : r.rep;
           const ok = cp.rep >= repNeeded;
 
-          // Customs risk indicator
           const customsRisk = carryingUnits > 0 ? Math.round(
             Math.max(0.05, Math.min(0.75,
               r.customsStrictness + carryingUnits * 0.002 + cp.heat * 0.002 - (cp.space > 100 ? 0.05 : 0)
@@ -98,122 +94,58 @@ export function MapTab() {
               }}
               disabled={!ok}
               style={[
-                styles.intlBtn,
+                {
+                  width: '48%', borderWidth: 1, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 10,
+                  alignItems: 'center',
+                },
                 ok ? {
                   backgroundColor: r.color + '06',
                   borderColor: r.color + '18',
                 } : {
-                  backgroundColor: 'rgba(255,255,255,0.01)',
-                  borderColor: '#ffffff06',
+                  backgroundColor: colors.bgCard,
+                  borderColor: colors.border,
+                  opacity: 0.3,
                 },
-                !ok && { opacity: 0.3 },
               ]}
               activeOpacity={0.7}
             >
-              <Text style={styles.locEmoji}>{r.emoji}</Text>
-              <Text style={[styles.locName, ok ? {} : { color: colors.textDarkest }]}>{r.name}</Text>
-              {!ok && <Text style={styles.lockedLabel}>🔒 {repNeeded} rep</Text>}
-              {ok && <Text style={styles.flyCostLabel}>✈️ {$(flyCost)} • {isNyc ? (currentRegion?.travelDays || 2) : r.travelDays}d</Text>}
+              <Text style={{ fontSize: 20, marginBottom: 2 }}>{r.emoji}</Text>
+              <Text style={[
+                { fontSize: 14, fontWeight: '600', color: colors.textDim },
+                !ok && { color: colors.textDarkest },
+              ]}>{r.name}</Text>
+              {!ok && <Text style={{ fontSize: 12, color: colors.textDark }}>Locked {repNeeded} rep</Text>}
+              {ok && <Text style={{ fontSize: 12, color: colors.textMuted }}>{$(flyCost)} {'\u2022'} {isNyc ? (currentRegion?.travelDays || 2) : r.travelDays}d</Text>}
               {ok && !isNyc && Object.keys(r.priceMultipliers).length > 0 && (
-                <Text style={styles.discountLabel}>
+                <Text style={{ fontSize: 11, color: colors.textDim }}>
                   {Object.entries(r.priceMultipliers).map(([d, m]) =>
-                    `${DRUGS.find(x => x.id === d)?.emoji}${Math.round((1 - m) * 100)}%↓`
+                    `${DRUGS.find(x => x.id === d)?.emoji}${Math.round((1 - m) * 100)}%\u2193`
                   ).join(' ')}
                 </Text>
               )}
               {ok && carryingUnits > 0 && (
-                <Text style={[styles.customsLabel, {
+                <Text style={{
+                  fontSize: 11, fontWeight: '600', marginTop: 2,
                   color: customsRisk >= 50 ? colors.red : customsRisk >= 30 ? colors.yellow : colors.textMuted,
-                }]}>
-                  🛃 {customsRisk}% risk
+                }}>
+                  Customs {customsRisk}% risk
                   {r.contraband.length > 0 && (
-                    ` • ${r.contraband.map(id => DRUGS.find(d => d.id === id)?.emoji || '').join('')} 2x`
+                    ` ${'\u2022'} ${r.contraband.map(id => DRUGS.find(d => d.id === id)?.emoji || '').join('')} 2x`
                   )}
                 </Text>
               )}
               {ok && forecast && forecast.regionId === r.id && (
                 <Text style={{
-                  fontSize: 7,
-                  fontWeight: '700',
-                  color: forecast.type === 'spike' ? '#f59e0b' : '#14b8a6',
-                  marginTop: 1,
+                  fontSize: 11, fontWeight: '700', marginTop: 2,
+                  color: forecast.type === 'spike' ? colors.yellow : colors.teal,
                 }}>
-                  {forecast.type === 'spike' ? '\ud83d\udcc8 Rumors of activity' : '\ud83d\udcc9 Market whispers'}
+                  {forecast.type === 'spike' ? 'Rumors of activity' : 'Market whispers'}
                 </Text>
               )}
             </TouchableOpacity>
           );
         })}
       </View>
-
-      {/* 2P End Turn */}
-      {mode === '2p' && (
-        <TouchableOpacity style={styles.endTurnBtn} onPress={endTurn} activeOpacity={0.8}>
-          <Text style={styles.endTurnText}>END TURN → P{turn === 1 ? 2 : 1}</Text>
-        </TouchableOpacity>
-      )}
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { paddingHorizontal: 8, paddingTop: 4, paddingBottom: 8 },
-  sectionLabel: {
-    fontSize: 8,
-    color: colors.textDark,
-    letterSpacing: 2,
-    marginBottom: 3,
-  },
-  nycGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: 8,
-  },
-  locBtn: {
-    width: '31.5%',
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingVertical: 6,
-    paddingHorizontal: 3,
-    alignItems: 'center',
-  },
-  locEmoji: { fontSize: 14, marginBottom: 1 },
-  locName: { fontSize: 10, fontWeight: '600', color: colors.textDim, textAlign: 'center' },
-  ownedLabel: { fontSize: 7, color: colors.green },
-  rivalLabel: { fontSize: 7, color: '#6366f1', fontWeight: '700' },
-  gangLabel: { fontSize: 7 },
-  serviceLabel: { fontSize: 6, color: colors.textDark },
-  intlGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  intlBtn: {
-    width: '48%',
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingVertical: 6,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-  },
-  lockedLabel: { fontSize: 7, color: colors.textDark },
-  flyCostLabel: { fontSize: 7, color: colors.textMuted },
-  discountLabel: { fontSize: 6, color: colors.textDark },
-  customsLabel: { fontSize: 6, fontWeight: '600', marginTop: 1 },
-  returnLabel: { fontSize: 6, fontWeight: '700', color: colors.yellow },
-  endTurnBtn: {
-    backgroundColor: colors.indigo,
-    borderRadius: 6,
-    paddingVertical: 12,
-    marginTop: 10,
-    alignItems: 'center',
-  },
-  endTurnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-});

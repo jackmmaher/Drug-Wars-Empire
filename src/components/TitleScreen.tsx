@@ -1,39 +1,70 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 import { $, STARTING_CASH, STARTING_DEBT, DAYS } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
+import { AdBanner } from './AdBanner';
 
-const TAGS = ['🌍 International', '🏴 Territory', '🐀 Informants', '⚔️ Gangs', '📈 Near Misses', '👑 Ranks'];
+const TAGS = ['International', 'Territory', 'Informants', 'Gangs', 'Near Misses', 'Ranks'];
 
 export function TitleScreen() {
+  const { colors, mode, toggleTheme } = useTheme();
   const startGame = useGameStore(s => s.startGame);
+  const playerName = useGameStore(s => s.playerName);
+  const setPlayerName = useGameStore(s => s.setPlayerName);
   const [difficulty, setDifficulty] = React.useState<'conservative' | 'standard' | 'highroller'>('standard');
+  const canPlay = playerName.trim().length > 0;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.edition}>Empire Edition</Text>
-        <Text style={styles.titleDrug}>DRUG</Text>
-        <Text style={styles.titleWars}>WARS</Text>
-        <View style={styles.divider} />
+    <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ alignItems: 'center', paddingHorizontal: 24, maxWidth: 520 }}>
+        {/* Theme toggle */}
+        <TouchableOpacity onPress={toggleTheme} style={{
+          position: 'absolute', top: -40, right: 0,
+          width: 36, height: 36, borderRadius: 18,
+          backgroundColor: colors.bgCardHover,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Text style={{ fontSize: 20 }}>{mode === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19'}</Text>
+        </TouchableOpacity>
 
-        <Text style={styles.desc}>
+        <Text style={{ fontSize: 14, letterSpacing: 8, color: colors.textDim, textTransform: 'uppercase', marginBottom: 16 }}>Empire Edition</Text>
+        <Text style={{ fontSize: 64, fontWeight: '900', color: colors.red, lineHeight: 68, letterSpacing: -3 }}>DRUG</Text>
+        <Text style={{ fontSize: 64, fontWeight: '900', color: colors.yellow, lineHeight: 68, letterSpacing: -3 }}>WARS</Text>
+        <View style={{ width: 80, height: 1, backgroundColor: colors.red, marginVertical: 20, opacity: 0.5 }} />
+
+        <Text style={{ color: colors.textMuted, fontSize: 16, lineHeight: 24, textAlign: 'center', marginBottom: 24 }}>
           You owe{' '}
-          <Text style={styles.redText}>{$(STARTING_DEBT)}</Text> to the shark.{' '}
-          <Text style={styles.greenText}>{$(STARTING_CASH)}</Text> in your pocket.
-          <Text style={styles.yellowText}> {DAYS} days</Text> to build an empire, go international, control territory, and survive.
+          <Text style={{ color: colors.red, fontWeight: '700' }}>{$(STARTING_DEBT)}</Text> to the shark.{' '}
+          <Text style={{ color: colors.green, fontWeight: '700' }}>{$(STARTING_CASH)}</Text> in your pocket.
+          <Text style={{ color: colors.yellow, fontWeight: '700' }}> {DAYS} days</Text> to build an empire, go international, control territory, and survive.
         </Text>
 
-        <View style={styles.tags}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 24 }}>
           {TAGS.map((t, i) => (
-            <View key={i} style={styles.tag}>
-              <Text style={styles.tagText}>{t}</Text>
+            <View key={i} style={{
+              backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderLight,
+              borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+            }}>
+              <Text style={{ fontSize: 13, color: colors.textMuted }}>{t}</Text>
             </View>
           ))}
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 12, justifyContent: 'center' }}>
+        <TextInput
+          value={playerName}
+          onChangeText={setPlayerName}
+          placeholder="Enter your name..."
+          placeholderTextColor={colors.textDark}
+          maxLength={20}
+          style={{
+            backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderLight,
+            borderRadius: 8, paddingVertical: 12, paddingHorizontal: 16,
+            fontSize: 18, color: colors.text, textAlign: 'center', marginBottom: 16, width: '100%', maxWidth: 320,
+          }}
+        />
+
+        <View style={{ flexDirection: 'row', gap: 8, marginVertical: 14, justifyContent: 'center' }}>
           {([
             { id: 'conservative', emoji: '\u{1F6E1}\uFE0F', label: 'Safe', cash: '$500', debt: '$2K' },
             { id: 'standard', emoji: '\u2696\uFE0F', label: 'Standard', cash: '$3.5K', debt: '$4K' },
@@ -44,131 +75,40 @@ export function TitleScreen() {
               onPress={() => setDifficulty(d.id)}
               style={{
                 flex: 1,
-                backgroundColor: difficulty === d.id ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.02)',
+                backgroundColor: difficulty === d.id ? 'rgba(239,68,68,0.12)' : colors.bgCard,
                 borderWidth: 1,
-                borderColor: difficulty === d.id ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)',
-                borderRadius: 6,
-                paddingVertical: 8,
-                paddingHorizontal: 4,
+                borderColor: difficulty === d.id ? 'rgba(239,68,68,0.3)' : colors.borderLight,
+                borderRadius: 8,
+                paddingVertical: 12,
+                paddingHorizontal: 6,
                 alignItems: 'center',
               }}
             >
-              <Text style={{ fontSize: 18 }}>{d.emoji}</Text>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: difficulty === d.id ? '#ef4444' : '#94a3b8', marginTop: 2 }}>{d.label}</Text>
-              <Text style={{ fontSize: 8, color: '#475569', marginTop: 2 }}>{d.cash} / {d.debt}</Text>
+              <Text style={{ fontSize: 22 }}>{d.emoji}</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: difficulty === d.id ? colors.red : colors.textDim, marginTop: 4 }}>{d.label}</Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{d.cash} / {d.debt}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.buttons}>
-          <TouchableOpacity style={styles.soloBtn} onPress={() => startGame('solo', difficulty)} activeOpacity={0.8}>
-            <Text style={styles.btnText}>SOLO</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.twoPlayerBtn} onPress={() => startGame('2p', difficulty)} activeOpacity={0.8}>
-            <Text style={styles.btnText}>2 PLAYER</Text>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <TouchableOpacity
+            style={[
+              { backgroundColor: colors.red, borderRadius: 8, paddingVertical: 14, paddingHorizontal: 40 },
+              !canPlay && { opacity: 0.4 },
+            ]}
+            onPress={() => canPlay && startGame(difficulty)}
+            activeOpacity={0.8}
+            disabled={!canPlay}
+          >
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 1 }}>PLAY</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.credit}>Based on John E. Dell's 1984 classic</Text>
+        <Text style={{ fontSize: 12, color: colors.textDarkest, marginTop: 20 }}>Based on John E. Dell's 1984 classic</Text>
       </View>
+
+      <AdBanner slot="title-banner" />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    maxWidth: 440,
-  },
-  edition: {
-    fontSize: 9,
-    letterSpacing: 8,
-    color: colors.textDark,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  titleDrug: {
-    fontSize: 56,
-    fontWeight: '900',
-    color: colors.red,
-    lineHeight: 58,
-    letterSpacing: -3,
-  },
-  titleWars: {
-    fontSize: 56,
-    fontWeight: '900',
-    color: colors.yellow,
-    lineHeight: 58,
-    letterSpacing: -3,
-  },
-  divider: {
-    width: 80,
-    height: 1,
-    backgroundColor: colors.red,
-    marginVertical: 16,
-    opacity: 0.5,
-  },
-  desc: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  redText: { color: colors.red, fontWeight: '700' },
-  greenText: { color: colors.green, fontWeight: '700' },
-  yellowText: { color: colors.yellow, fontWeight: '700' },
-  tags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 20,
-  },
-  tag: {
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  tagText: {
-    fontSize: 9,
-    color: colors.textMuted,
-  },
-  buttons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  soloBtn: {
-    backgroundColor: colors.red,
-    borderRadius: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-  },
-  twoPlayerBtn: {
-    backgroundColor: colors.blue,
-    borderRadius: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-  },
-  btnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  credit: {
-    fontSize: 8,
-    color: colors.textDarkest,
-    marginTop: 16,
-  },
-});

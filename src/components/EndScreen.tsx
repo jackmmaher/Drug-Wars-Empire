@@ -1,21 +1,50 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { colors } from '../constants/theme';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 import { $, MILESTONES, DAYS, getRank } from '../constants/game';
 import { netWorth } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
+import { submitScore, fetchLeaderboard, type ScoreEntry } from '../lib/leaderboard';
+import { AdBanner } from './AdBanner';
 
 export function EndScreen() {
+  const { colors } = useTheme();
   const phase = useGameStore(s => s.phase);
-  const mode = useGameStore(s => s.mode);
-  const cp = useGameStore(s => s.currentPlayer());
-  const p1 = useGameStore(s => s.p1);
-  const p2 = useGameStore(s => s.p2);
+  const cp = useGameStore(s => s.player);
   const resetToTitle = useGameStore(s => s.resetToTitle);
+  const playerName = useGameStore(s => s.playerName);
+
+  const [leaderboard, setLeaderboard] = React.useState<ScoreEntry[]>([]);
+  const [submitted, setSubmitted] = React.useState(false);
 
   const isWin = phase === 'win';
   const fn = cp.cash + cp.bank - cp.debt;
   const fr = getRank(cp.rep);
+
+  React.useEffect(() => {
+    const run = async () => {
+      const nw = netWorth(cp);
+      const rank = getRank(cp.rep);
+      await submitScore({
+        player_name: playerName,
+        net_worth: nw,
+        rank_name: rank.name,
+        difficulty: 'standard',
+        rep: cp.rep,
+        territories: Object.keys(cp.territories).length,
+        milestones: cp.milestones.length,
+        trades: cp.trades,
+        best_trade: cp.bestTrade,
+        fingers: cp.fingers,
+        days_survived: Math.min(cp.day, DAYS),
+        won: phase === 'win',
+      });
+      setSubmitted(true);
+      const lb = await fetchLeaderboard(10);
+      setLeaderboard(lb);
+    };
+    run();
+  }, []);
 
   const stats = [
     { label: 'Trades', value: cp.trades },
@@ -30,47 +59,37 @@ export function EndScreen() {
   ];
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.emoji}>{isWin ? fr.emoji : '💀'}</Text>
-        <Text style={[styles.title, { color: isWin ? colors.green : colors.red }]}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView contentContainerStyle={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 24, paddingBottom: 40 }}>
+        <Text style={{ fontSize: 64, marginBottom: 6 }}>{isWin ? fr.emoji : '\uD83D\uDC80'}</Text>
+        <Text style={{ fontSize: 34, fontWeight: '900', marginBottom: 6, color: isWin ? colors.green : colors.red }}>
           {isWin ? 'SURVIVED' : cp.hp <= 0 ? 'DEAD' : 'GAME OVER'}
         </Text>
 
-        {mode === '2p' && p1 && p2 ? (
-          <View style={styles.twoPlayerResults}>
-            <Text style={[styles.playerScore, { color: colors.red }]}>
-              P1: {$(p1.cash + p1.bank - p1.debt)} {getRank(p1.rep).emoji}
-            </Text>
-            <Text style={[styles.playerScore, { color: colors.blue }]}>
-              P2: {$(p2.cash + p2.bank - p2.debt)} {getRank(p2.rep).emoji}
-            </Text>
-          </View>
-        ) : (
-          <>
-            <Text style={styles.rank}>{fr.name}</Text>
-            <Text style={styles.netWorth}>Net: {$(fn)}</Text>
-          </>
-        )}
+        <Text style={{ fontSize: 17, color: colors.yellow, fontWeight: '800' }}>{fr.name}</Text>
+        <Text style={{ fontSize: 30, fontWeight: '900', color: colors.white, marginVertical: 8 }}>Net: {$(fn)}</Text>
 
-        <View style={styles.statsGrid}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, maxWidth: 500, marginBottom: 20 }}>
           {stats.map((s, i) => (
-            <View key={i} style={styles.statBox}>
-              <Text style={styles.statLabel}>{s.label}</Text>
-              <Text style={[styles.statValue, s.color ? { color: s.color } : null]}>
+            <View key={i} style={{
+              backgroundColor: colors.bgCard, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14,
+              alignItems: 'center', width: 120,
+            }}>
+              <Text style={{ fontSize: 12, color: colors.textDark, textTransform: 'uppercase', letterSpacing: 1 }}>{s.label}</Text>
+              <Text style={[{ fontSize: 16, fontWeight: '800', color: colors.text }, s.color ? { color: s.color } : null]}>
                 {s.value}
               </Text>
             </View>
           ))}
         </View>
 
-        <View style={styles.milestones}>
+        <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 16 }}>
           {MILESTONES.map(m => (
             <Text
               key={m.id}
               style={[
-                styles.milestoneEmoji,
-                !cp.milestones?.includes(m.id) && styles.milestoneInactive,
+                { fontSize: 22 },
+                !cp.milestones?.includes(m.id) && { opacity: 0.12 },
               ]}
             >
               {m.emoji}
@@ -78,96 +97,37 @@ export function EndScreen() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.playAgainBtn} onPress={resetToTitle} activeOpacity={0.8}>
-          <Text style={styles.playAgainText}>PLAY AGAIN</Text>
+        <AdBanner slot="end-banner" />
+
+        {leaderboard.length > 0 && (
+          <View style={{ marginTop: 20, width: '100%', maxWidth: 420 }}>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: colors.yellow, letterSpacing: 2, marginBottom: 10, textAlign: 'center' }}>
+              LEADERBOARD
+            </Text>
+            {leaderboard.map((entry, i) => (
+              <View key={entry.id} style={{
+                flexDirection: 'row', justifyContent: 'space-between',
+                paddingVertical: 6, paddingHorizontal: 12,
+                backgroundColor: entry.player_name === playerName ? 'rgba(245,158,11,0.08)' : 'transparent',
+                borderRadius: 5,
+              }}>
+                <Text style={{ fontSize: 15, color: i < 3 ? colors.yellow : colors.textDim }}>
+                  {i + 1}. {entry.player_name}
+                </Text>
+                <Text style={{ fontSize: 15, color: colors.text, fontWeight: '600' }}>
+                  ${entry.net_worth.toLocaleString()}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity style={{
+          backgroundColor: colors.red, borderRadius: 8, paddingVertical: 14, paddingHorizontal: 40, marginTop: 20,
+        }} onPress={resetToTitle} activeOpacity={0.8}>
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 1 }}>PLAY AGAIN</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  content: {
-    alignItems: 'center',
-    paddingTop: 48,
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
-  emoji: { fontSize: 56, marginBottom: 4 },
-  title: {
-    fontSize: 30,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  rank: {
-    fontSize: 13,
-    color: colors.yellow,
-    fontWeight: '800',
-  },
-  netWorth: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: colors.white,
-    marginVertical: 6,
-  },
-  twoPlayerResults: {
-    marginVertical: 12,
-  },
-  playerScore: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginVertical: 4,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 5,
-    maxWidth: 360,
-    marginBottom: 16,
-  },
-  statBox: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 5,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    width: 108,
-  },
-  statLabel: {
-    fontSize: 7,
-    color: colors.textDark,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  statValue: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#cbd5e1',
-  },
-  milestones: {
-    flexDirection: 'row',
-    gap: 3,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  milestoneEmoji: { fontSize: 18 },
-  milestoneInactive: { opacity: 0.12 },
-  playAgainBtn: {
-    backgroundColor: colors.red,
-    borderRadius: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-  },
-  playAgainText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-});

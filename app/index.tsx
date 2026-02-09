@@ -1,15 +1,22 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
 import { useGameStore } from '../src/stores/gameStore';
 import { TitleScreen } from '../src/components/TitleScreen';
 import { GameScreen } from '../src/components/GameScreen';
 import { CopScreen } from '../src/components/CopScreen';
 import { TradeModal } from '../src/components/TradeModal';
 import { EndScreen } from '../src/components/EndScreen';
+import { AdInterstitial } from '../src/components/AdInterstitial';
 
 export default function GameRouter() {
   const phase = useGameStore(s => s.phase);
   const activeTrade = useGameStore(s => s.activeTrade);
+  const showingAd = useGameStore(s => s.showingAd);
+  const dismissAd = useGameStore(s => s.dismissAd);
+
+  // Travel interstitial ad (every 5th travel)
+  if (showingAd) {
+    return <AdInterstitial onClose={dismissAd} />;
+  }
 
   // Trade modal overlays the game
   if (activeTrade && phase === 'playing') {

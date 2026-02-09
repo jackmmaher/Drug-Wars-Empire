@@ -1,12 +1,13 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { colors } from '../constants/theme';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 import { $, DRUGS, LOCATIONS, STASH_CAPACITY } from '../constants/game';
 import { inventoryCount } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
 export function MarketTab() {
-  const cp = useGameStore(s => s.currentPlayer());
+  const { colors } = useTheme();
+  const cp = useGameStore(s => s.player);
   const openTrade = useGameStore(s => s.openTrade);
   const bank = useGameStore(s => s.bank);
   const shark = useGameStore(s => s.shark);
@@ -22,28 +23,42 @@ export function MarketTab() {
   const hasBank = !!loc?.bank;
   const hasShark = !!loc?.shark;
   const territory = cp.territories[cp.location];
-  const stash = territory?.stash || {};
-  const stashCount = Object.values(stash).reduce((a: number, b: number) => a + b, 0);
+  const stash: Record<string, number> = territory?.stash || {};
+  const stashCount = Object.values(stash).reduce((a, b) => a + b, 0);
+
+  const smBtn = {
+    backgroundColor: colors.cardBorder,
+    borderRadius: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  } as const;
+  const smBtnText = { color: colors.text, fontSize: 14, fontWeight: '600' as const };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Bank & Shark buttons (in any city with bank/shark) */}
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6 }}>
+      {/* Bank & Shark buttons */}
       {(hasBank || hasShark) && (
-        <View style={styles.bankRow}>
+        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6 }}>
           <TouchableOpacity
-            style={[styles.bankBtn, subPanel === 'bk' && styles.bankBtnActive]}
+            style={[
+              { flex: 1, backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 12 },
+              subPanel === 'bk' && { backgroundColor: colors.blueDark },
+            ]}
             onPress={() => setSubPanel('bk')}
           >
-            <Text style={styles.bankBtnText}>
-              🏦 Bank {cp.bank > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.bank)})</Text> : null}
+            <Text style={{ color: colors.blueLight, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+              Bank {cp.bank > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.bank)})</Text> : null}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.sharkBtn, subPanel === 'sk' && styles.sharkBtnActive]}
+            style={[
+              { flex: 1, backgroundColor: 'rgba(239,68,68,0.06)', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 12 },
+              subPanel === 'sk' && { backgroundColor: '#7f1d1d' },
+            ]}
             onPress={() => setSubPanel('sk')}
           >
-            <Text style={styles.sharkBtnText}>
-              🦈 Shark {cp.debt > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.debt)})</Text> : null}
+            <Text style={{ color: colors.redLight, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+              Shark {cp.debt > 0 ? <Text style={{ opacity: 0.6 }}>({$(cp.debt)})</Text> : null}
             </Text>
           </TouchableOpacity>
         </View>
@@ -51,21 +66,24 @@ export function MarketTab() {
 
       {/* Bank panel */}
       {subPanel === 'bk' && (
-        <View style={styles.bankPanel}>
-          <Text style={styles.bankInfo}>Balance: <Text style={{ fontWeight: '700' }}>{$(cp.bank)}</Text> • 5%/day interest</Text>
-          <View style={styles.bankActions}>
-            <TouchableOpacity style={styles.smBtn} onPress={() => bank('deposit', 'all')}>
-              <Text style={styles.smBtnText}>Deposit All</Text>
+        <View style={{
+          padding: 10, backgroundColor: colors.bgBlue, borderRadius: 6, marginBottom: 6,
+          borderWidth: 1, borderColor: 'rgba(59,130,246,0.1)',
+        }}>
+          <Text style={{ fontSize: 14, color: colors.blueLight, marginBottom: 6 }}>Balance: <Text style={{ fontWeight: '700' }}>{$(cp.bank)}</Text> {'\u2022'} 5%/day interest</Text>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <TouchableOpacity style={smBtn} onPress={() => bank('deposit', 'all')}>
+              <Text style={smBtnText}>Deposit All</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.smBtn} onPress={() => bank('deposit', Math.floor(cp.cash / 2))}>
-              <Text style={styles.smBtnText}>Deposit Half</Text>
+            <TouchableOpacity style={smBtn} onPress={() => bank('deposit', Math.floor(cp.cash / 2))}>
+              <Text style={smBtnText}>Deposit Half</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.smBtn} onPress={() => bank('withdraw', 'all')}>
-              <Text style={styles.smBtnText}>Withdraw All</Text>
+            <TouchableOpacity style={smBtn} onPress={() => bank('withdraw', 'all')}>
+              <Text style={smBtnText}>Withdraw All</Text>
             </TouchableOpacity>
             {cp.bank > 0 && (
-              <TouchableOpacity style={styles.smBtn} onPress={() => bank('withdraw', Math.floor(cp.bank / 2))}>
-                <Text style={styles.smBtnText}>Withdraw Half</Text>
+              <TouchableOpacity style={smBtn} onPress={() => bank('withdraw', Math.floor(cp.bank / 2))}>
+                <Text style={smBtnText}>Withdraw Half</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -74,38 +92,41 @@ export function MarketTab() {
 
       {/* Shark panel */}
       {subPanel === 'sk' && (
-        <View style={styles.sharkPanel}>
-          <Text style={styles.sharkInfo}>Debt: <Text style={{ fontWeight: '700' }}>{$(cp.debt)}</Text> • 10%/day interest!</Text>
-          <Text style={[styles.sharkInfo, { marginBottom: 4 }]}>Cash: <Text style={{ fontWeight: '700' }}>{$(cp.cash)}</Text></Text>
+        <View style={{
+          padding: 10, backgroundColor: 'rgba(239,68,68,0.04)', borderRadius: 6, marginBottom: 6,
+          borderWidth: 1, borderColor: 'rgba(239,68,68,0.1)',
+        }}>
+          <Text style={{ fontSize: 14, color: colors.redLight, marginBottom: 2 }}>Debt: <Text style={{ fontWeight: '700' }}>{$(cp.debt)}</Text> {'\u2022'} 10%/day interest!</Text>
+          <Text style={{ fontSize: 14, color: colors.redLight, marginBottom: 6 }}>Cash: <Text style={{ fontWeight: '700' }}>{$(cp.cash)}</Text></Text>
           {cp.debt > 0 && (
             <>
-              <Text style={styles.sharkSubLabel}>REPAY</Text>
-              <View style={styles.bankActions}>
-                <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDark }]} onPress={() => shark('all')}>
-                  <Text style={styles.smBtnText}>Pay All ({$(Math.min(cp.cash, cp.debt))})</Text>
+              <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, marginBottom: 4, fontWeight: '600' }}>REPAY</Text>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                <TouchableOpacity style={[smBtn, { backgroundColor: colors.redDark }]} onPress={() => shark('all')}>
+                  <Text style={smBtnText}>Pay All ({$(Math.min(cp.cash, cp.debt))})</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDarker }]} onPress={() => shark(Math.floor(Math.min(cp.cash, cp.debt) / 2))}>
-                  <Text style={styles.smBtnText}>Pay Half</Text>
+                <TouchableOpacity style={[smBtn, { backgroundColor: colors.redDarker }]} onPress={() => shark(Math.floor(Math.min(cp.cash, cp.debt) / 2))}>
+                  <Text style={smBtnText}>Pay Half</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.smBtn, { backgroundColor: colors.redDarker }]} onPress={() => shark(1000)}>
-                  <Text style={styles.smBtnText}>Pay $1K</Text>
+                <TouchableOpacity style={[smBtn, { backgroundColor: colors.redDarker }]} onPress={() => shark(1000)}>
+                  <Text style={smBtnText}>Pay $1K</Text>
                 </TouchableOpacity>
               </View>
             </>
           )}
-          <Text style={[styles.sharkSubLabel, { marginTop: 4 }]}>BORROW</Text>
-          <View style={styles.bankActions}>
-            <TouchableOpacity style={[styles.smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(1000)}>
-              <Text style={styles.smBtnText}>+$1,000</Text>
+          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, marginTop: 6, marginBottom: 4, fontWeight: '600' }}>BORROW</Text>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <TouchableOpacity style={[smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(1000)}>
+              <Text style={smBtnText}>+$1,000</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(5000)}>
-              <Text style={styles.smBtnText}>+$5,000</Text>
+            <TouchableOpacity style={[smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(5000)}>
+              <Text style={smBtnText}>+$5,000</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(10000)}>
-              <Text style={styles.smBtnText}>+$10,000</Text>
+            <TouchableOpacity style={[smBtn, { backgroundColor: '#4c1d95' }]} onPress={() => borrow(10000)}>
+              <Text style={smBtnText}>+$10,000</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.sharkWarn}>Interest compounds daily. Pay it off fast!</Text>
+          <Text style={{ fontSize: 12, color: colors.textDark, marginTop: 6, fontStyle: 'italic' }}>Interest compounds daily. Pay it off fast!</Text>
         </View>
       )}
 
@@ -123,29 +144,39 @@ export function MarketTab() {
 
         return (
           <View key={d.id} style={[
-            styles.drugRow,
-            hasProfitGlow && styles.drugRowProfit,
-            hasLossGlow && styles.drugRowLoss,
-            !pr && styles.drugRowUnavailable,
+            {
+              flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10,
+              borderRadius: 6, gap: 6, backgroundColor: colors.bgCard,
+              borderLeftWidth: 3, borderLeftColor: 'transparent', marginBottom: 2,
+            },
+            hasProfitGlow && { backgroundColor: colors.bgSuccess, borderLeftColor: colors.green },
+            hasLossGlow && { borderLeftColor: colors.red },
+            !pr && { opacity: 0.25 },
           ]}>
-            <Text style={styles.drugEmoji}>{d.emoji}</Text>
-            <View style={styles.drugInfo}>
-              <Text style={styles.drugName}>{d.name}</Text>
+            <Text style={{ fontSize: 18, width: 30 }}>{d.emoji}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{d.name}</Text>
               {pc !== null && pc !== 0 && (
-                <Text style={{ fontSize: 8, color: pc > 0 ? colors.green : colors.red }}>
-                  {pc > 0 ? '▲' : '▼'}{Math.abs(pc).toFixed(0)}%
+                <Text style={{ fontSize: 12, color: pc > 0 ? colors.green : colors.red }}>
+                  {pc > 0 ? '\u25B2' : '\u25BC'}{Math.abs(pc).toFixed(0)}%
                 </Text>
               )}
             </View>
-            <Text style={[styles.drugPrice, !pr && { color: colors.textDarkest }]}>
-              {pr ? $(pr) : '—'}
+            <Text style={[
+              { width: 80, textAlign: 'right', fontSize: 16, fontWeight: '800', color: colors.white },
+              !pr && { color: colors.textDarkest },
+            ]}>
+              {pr ? $(pr) : '--'}
             </Text>
-            <View style={styles.drugOwn}>
-              <Text style={[styles.drugOwnText, own > 0 ? { color: colors.text } : { color: colors.textDarkest }]}>
-                {own || '—'}
+            <View style={{ width: 44, alignItems: 'center' }}>
+              <Text style={[
+                { fontSize: 14 },
+                own > 0 ? { color: colors.text, fontWeight: '700' } : { color: colors.textDarkest },
+              ]}>
+                {own || '--'}
               </Text>
               {pnl !== null && own > 0 && (
-                <Text style={{ fontSize: 7, fontWeight: '700', color: pnl > 0 ? colors.green : colors.red }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: pnl > 0 ? colors.green : colors.red }}>
                   {pnl > 0 ? '+' : ''}{pnl.toFixed(0)}%
                 </Text>
               )}
@@ -153,23 +184,35 @@ export function MarketTab() {
             <TouchableOpacity
               disabled={!pr || maxBuy <= 0}
               onPress={() => openTrade(d.id, 'buy')}
-              style={[styles.tradeBtn, pr && maxBuy > 0 ? styles.buyBtn : styles.tradeBtnDisabled]}
+              style={[
+                { borderRadius: 5, paddingVertical: 8, width: 56, alignItems: 'center' },
+                pr && maxBuy > 0 ? { backgroundColor: colors.green } : { backgroundColor: colors.disabledBg },
+              ]}
             >
-              <Text style={[styles.tradeBtnText, pr && maxBuy > 0 ? { color: '#fff' } : { color: colors.textDarkest }]}>BUY</Text>
+              <Text style={[
+                { fontSize: 13, fontWeight: '800' },
+                pr && maxBuy > 0 ? { color: '#fff' } : { color: colors.textDarkest },
+              ]}>BUY</Text>
             </TouchableOpacity>
             <TouchableOpacity
               disabled={own <= 0 || !pr}
               onPress={() => openTrade(d.id, 'sell')}
-              style={[styles.tradeBtn, own > 0 && pr ? styles.sellBtn : styles.tradeBtnDisabled]}
+              style={[
+                { borderRadius: 5, paddingVertical: 8, width: 56, alignItems: 'center' },
+                own > 0 && pr ? { backgroundColor: colors.yellow } : { backgroundColor: colors.disabledBg },
+              ]}
             >
-              <Text style={[styles.tradeBtnText, own > 0 && pr ? { color: '#fff' } : { color: colors.textDarkest }]}>SELL</Text>
+              <Text style={[
+                { fontSize: 13, fontWeight: '800' },
+                own > 0 && pr ? { color: '#fff' } : { color: colors.textDarkest },
+              ]}>SELL</Text>
             </TouchableOpacity>
             {territory && own > 0 && (
               <TouchableOpacity
                 onPress={() => stashAction(d.id, own)}
-                style={styles.stashBtn}
+                style={{ backgroundColor: colors.cardBorder, borderRadius: 5, paddingVertical: 8, width: 54, alignItems: 'center' }}
               >
-                <Text style={styles.stashBtnText}>STASH</Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textDim }}>STASH</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -178,8 +221,8 @@ export function MarketTab() {
 
       {/* Inventory summary */}
       {Object.keys(cp.inventory).length > 0 && (
-        <View style={styles.invSummary}>
-          <Text style={styles.invHeader}>CARRYING {used}/{cp.space}</Text>
+        <View style={{ marginTop: 10, gap: 4 }}>
+          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, marginBottom: 2, fontWeight: '600' }}>CARRYING {used}/{cp.space}</Text>
           {Object.entries(cp.inventory).filter(([, q]) => q > 0).map(([id, q]) => {
             const d = DRUGS.find(x => x.id === id);
             const pr = cp.prices[id] as number | null;
@@ -187,13 +230,19 @@ export function MarketTab() {
             const ab = cp.averageCosts[id];
             const pnl = pr && ab ? ((pr - ab) / ab * 100) : null;
             return (
-              <View key={id} style={styles.invTag}>
-                <Text style={styles.invTagEmoji}>{d?.emoji}</Text>
-                <Text style={styles.invTagName}>{d?.name}</Text>
-                <Text style={styles.invTagQty}>x{q}</Text>
-                {val > 0 && <Text style={styles.invTagVal}>{$(val)}</Text>}
+              <View key={id} style={{
+                flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard,
+                borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, gap: 6,
+              }}>
+                <Text style={{ fontSize: 16 }}>{d?.emoji}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textDim, flex: 1 }}>{d?.name}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>x{q}</Text>
+                {val > 0 && <Text style={{ fontSize: 13, color: colors.textMuted, width: 64, textAlign: 'right' }}>{$(val)}</Text>}
                 {pnl !== null && (
-                  <Text style={[styles.invTagPnl, { color: pnl > 0 ? colors.green : pnl < 0 ? colors.red : colors.textDark }]}>
+                  <Text style={{
+                    fontSize: 12, fontWeight: '700', width: 40, textAlign: 'right',
+                    color: pnl > 0 ? colors.green : pnl < 0 ? colors.red : colors.textDark,
+                  }}>
                     {pnl > 0 ? '+' : ''}{pnl.toFixed(0)}%
                   </Text>
                 )}
@@ -205,151 +254,29 @@ export function MarketTab() {
 
       {/* Stash panel (at owned territory) */}
       {territory && (
-        <View style={styles.stashPanel}>
-          <Text style={styles.stashHeader}>STASH ({stashCount}/{STASH_CAPACITY})</Text>
+        <View style={{ marginTop: 10, gap: 4 }}>
+          <Text style={{ fontSize: 12, color: colors.textDark, letterSpacing: 1, marginBottom: 2, fontWeight: '600' }}>STASH ({stashCount}/{STASH_CAPACITY})</Text>
           {Object.entries(stash).filter(([, q]) => q > 0).map(([id, q]) => {
             const drug = DRUGS.find(d => d.id === id);
             if (!drug) return null;
             return (
-              <View key={id} style={styles.stashRow}>
-                <Text style={styles.stashRowText}>{drug.emoji} {drug.name}: {q}</Text>
+              <View key={id} style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingVertical: 6, paddingHorizontal: 10,
+              }}>
+                <Text style={{ fontSize: 14, color: colors.textDim }}>{drug.emoji} {drug.name}: {q}</Text>
                 <TouchableOpacity
                   onPress={() => retrieveAction(id, q)}
-                  style={styles.stashTakeBtn}
+                  style={{ backgroundColor: colors.cardBorder, borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10 }}
                 >
-                  <Text style={styles.stashTakeBtnText}>Take All</Text>
+                  <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>Take All</Text>
                 </TouchableOpacity>
               </View>
             );
           })}
-          {stashCount === 0 && <Text style={styles.stashEmpty}>Empty. Stash drugs here for safekeeping.</Text>}
+          {stashCount === 0 && <Text style={{ fontSize: 13, color: colors.textDark, paddingHorizontal: 10 }}>Empty. Stash drugs here for safekeeping.</Text>}
         </View>
       )}
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { paddingHorizontal: 8, paddingBottom: 6, paddingTop: 3 },
-  bankRow: { flexDirection: 'row', gap: 4, marginBottom: 4 },
-  bankBtn: {
-    flex: 1,
-    backgroundColor: 'rgba(59,130,246,0.08)',
-    borderRadius: 3,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  bankBtnActive: { backgroundColor: colors.blueDark },
-  bankBtnText: { color: colors.blueLight, fontSize: 10, fontWeight: '600', textAlign: 'center' },
-  sharkBtn: {
-    flex: 1,
-    backgroundColor: 'rgba(239,68,68,0.06)',
-    borderRadius: 3,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  sharkBtnActive: { backgroundColor: '#7f1d1d' },
-  sharkBtnText: { color: colors.redLight, fontSize: 10, fontWeight: '600', textAlign: 'center' },
-  bankPanel: {
-    padding: 6,
-    backgroundColor: colors.bgBlue,
-    borderRadius: 5,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.1)',
-  },
-  bankInfo: { fontSize: 9, color: colors.blueLight, marginBottom: 3 },
-  bankActions: { flexDirection: 'row', gap: 3, flexWrap: 'wrap' },
-  sharkPanel: {
-    padding: 6,
-    backgroundColor: 'rgba(239,68,68,0.04)',
-    borderRadius: 5,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.1)',
-  },
-  sharkInfo: { fontSize: 9, color: colors.redLight, marginBottom: 1 },
-  sharkSubLabel: { fontSize: 7, color: colors.textDark, letterSpacing: 1, marginBottom: 2 },
-  sharkWarn: { fontSize: 7, color: colors.textDark, marginTop: 4, fontStyle: 'italic' },
-  smBtn: {
-    backgroundColor: colors.cardBorder,
-    borderRadius: 3,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  smBtnText: { color: '#cbd5e1', fontSize: 10, fontWeight: '600' },
-  drugRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 5,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    gap: 3,
-    backgroundColor: 'rgba(255,255,255,0.01)',
-    borderLeftWidth: 2,
-    borderLeftColor: 'transparent',
-    marginBottom: 1,
-  },
-  drugRowProfit: { backgroundColor: 'rgba(34,197,94,0.03)', borderLeftColor: colors.green },
-  drugRowLoss: { borderLeftColor: colors.red },
-  drugRowUnavailable: { opacity: 0.25 },
-  drugEmoji: { fontSize: 14, width: 24 },
-  drugInfo: { flex: 1 },
-  drugName: { fontSize: 11, fontWeight: '700', color: colors.text },
-  drugPrice: { width: 68, textAlign: 'right', fontSize: 12, fontWeight: '800', color: colors.white },
-  drugOwn: { width: 36, alignItems: 'center' },
-  drugOwnText: { fontSize: 10 },
-  tradeBtn: {
-    borderRadius: 3,
-    paddingVertical: 4,
-    width: 46,
-    alignItems: 'center',
-  },
-  buyBtn: { backgroundColor: colors.green },
-  sellBtn: { backgroundColor: colors.yellow },
-  tradeBtnDisabled: { backgroundColor: '#0f172a' },
-  tradeBtnText: { fontSize: 9, fontWeight: '800' },
-  invSummary: { marginTop: 6, gap: 2 },
-  invHeader: { fontSize: 7, color: colors.textDark, letterSpacing: 1, marginBottom: 2 },
-  invTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRadius: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    gap: 4,
-  },
-  invTagEmoji: { fontSize: 12 },
-  invTagName: { fontSize: 10, fontWeight: '600', color: colors.textDim, flex: 1 },
-  invTagQty: { fontSize: 10, fontWeight: '800', color: colors.text },
-  invTagVal: { fontSize: 9, color: colors.textMuted, width: 52, textAlign: 'right' },
-  invTagPnl: { fontSize: 8, fontWeight: '700', width: 32, textAlign: 'right' },
-  stashBtn: {
-    backgroundColor: '#1e293b',
-    borderRadius: 3,
-    paddingVertical: 4,
-    width: 40,
-    alignItems: 'center',
-  },
-  stashBtnText: { fontSize: 7, fontWeight: '800', color: '#94a3b8' },
-  stashPanel: { marginTop: 6, gap: 2 },
-  stashHeader: { fontSize: 7, color: colors.textDark, letterSpacing: 1, marginBottom: 2 },
-  stashRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-  },
-  stashRowText: { fontSize: 10, color: '#94a3b8' },
-  stashTakeBtn: {
-    backgroundColor: '#1e293b',
-    borderRadius: 3,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-  },
-  stashTakeBtnText: { fontSize: 9, color: '#cbd5e1', fontWeight: '600' },
-  stashEmpty: { fontSize: 9, color: '#334155', paddingHorizontal: 6 },
-});

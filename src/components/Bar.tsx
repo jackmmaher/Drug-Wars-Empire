@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { View, Text } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface BarProps {
   label?: string;
@@ -9,20 +9,27 @@ interface BarProps {
 }
 
 export function Bar({ label, percent, color }: BarProps) {
+  const { colors } = useTheme();
   const pct = Math.min(Math.max(percent, 0), 100);
   return (
-    <View style={styles.container}>
+    <View style={{ marginBottom: 3 }}>
       {label ? (
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>{label}</Text>
-          <Text style={styles.label}>{pct}%</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+          <Text style={{ fontSize: 13, color: colors.textDim, fontWeight: '600' }}>{label}</Text>
+          <Text style={{ fontSize: 13, color: colors.textDim, fontWeight: '600' }}>{pct}%</Text>
         </View>
       ) : null}
-      <View style={styles.track}>
+      <View style={{
+        height: 6,
+        backgroundColor: colors.trackBg,
+        borderRadius: 3,
+        overflow: 'hidden',
+      }}>
         <View
           style={[
-            styles.fill,
             {
+              height: '100%',
+              borderRadius: 3,
               width: `${pct}%`,
               backgroundColor: color,
             },
@@ -33,26 +40,3 @@ export function Bar({ label, percent, color }: BarProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { marginBottom: 2 },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 1,
-  },
-  label: {
-    fontSize: 8,
-    color: colors.textDark,
-  },
-  track: {
-    height: 4,
-    backgroundColor: '#0f172a',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-});

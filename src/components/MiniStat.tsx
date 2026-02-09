@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { View, Text } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface MiniStatProps {
   label: string;
@@ -9,31 +9,28 @@ interface MiniStatProps {
 }
 
 export function MiniStat({ label, value, color }: MiniStatProps) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.value, color ? { color } : null]}>{value}</Text>
+    <View style={{
+      backgroundColor: colors.bgCard,
+      borderRadius: 5,
+      paddingVertical: 5,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      flex: 1,
+    }}>
+      <Text style={{
+        fontSize: 11,
+        color: colors.textDark,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        fontWeight: '600',
+      }}>{label}</Text>
+      <Text style={{
+        fontSize: 15,
+        fontWeight: '800',
+        color: color || colors.text,
+      }}>{value}</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRadius: 3,
-    paddingVertical: 3,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-  },
-  label: {
-    fontSize: 6,
-    color: colors.textDark,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  value: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#cbd5e1',
-  },
-});

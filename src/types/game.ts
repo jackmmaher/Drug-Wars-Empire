@@ -202,14 +202,7 @@ export interface PlayerState {
   forecast: Forecast | null;
 }
 
-export interface SharedMarket {
-  day: number;
-  prices: Record<string, Record<string, number | null>>; // locationId -> drugId -> price
-  regionEvents: Record<string, MarketEvent | null>; // regionId -> event for the day
-}
-
 export type GamePhase = 'title' | 'playing' | 'cop' | 'win' | 'end';
-export type GameMode = 'solo' | '2p';
 export type TabId = 'market' | 'map' | 'intel';
 export type Difficulty = 'conservative' | 'standard' | 'highroller';
 

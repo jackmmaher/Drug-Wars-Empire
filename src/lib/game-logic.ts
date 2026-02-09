@@ -1,4 +1,4 @@
-import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment, Forecast, SharedMarket } from '../types/game';
+import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment, Forecast } from '../types/game';
 import {
   DRUGS, LOCATIONS, GANGS, EVENTS, MILESTONES, REGIONS,
   RAT_NAMES, RAT_TYPES,
@@ -1185,28 +1185,3 @@ export function getFingerMovePenalty(fingers: number): number {
   return fingers <= 6 ? 1 : 0;
 }
 
-// ── Shared Market (2P Mode) ─────────────────────────────
-export function generateSharedMarket(day: number): SharedMarket {
-  const regionEvents: Record<string, MarketEvent | null> = {};
-  const prices: Record<string, Record<string, number | null>> = {};
-
-  // Generate one event per region
-  for (const region of REGIONS) {
-    regionEvents[region.id] = selectEvent(region.id, null, 0.38);
-  }
-
-  // Generate prices per location based on region event
-  for (const loc of LOCATIONS) {
-    const region = REGIONS.find(r => r.id === loc.region);
-    const event = region ? regionEvents[region.id] : null;
-    prices[loc.id] = generatePrices(loc.id, event);
-  }
-
-  return { day, prices, regionEvents };
-}
-
-// ── Rival Territory Check (2P Mode) ─────────────────────
-export function isLocationOwnedByRival(rivalPlayer: PlayerState | null, locationId: string): boolean {
-  if (!rivalPlayer) return false;
-  return !!rivalPlayer.territories[locationId];
-}
