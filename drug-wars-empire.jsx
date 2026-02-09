@@ -213,14 +213,9 @@ export default function App() {
       const ev=C(0.38)?EVTS[R(0,EVTS.length-1)]:null;
       p.ev=ev; p.prev={...p.prices}; p.prices=genP(lid,ev);
       if(ev) p.evs=[...p.evs,{d:p.day,m:ev.m,t:ev.t}];
-      // NEAR MISS (dopamine)
+      // NEAR MISS — only for drugs you no longer hold (sold too early)
       const nms=[];
-      for(const[id,q] of Object.entries(p.inv)){
-        if(q<=0)continue;const pr=p.prev[id],now=p.prices[id];
-        if(pr&&now&&now>pr*2.5) nms.push({drug:DRUGS.find(x=>x.id===id),pr,now,q,miss:q*(now-pr)});
-      }
-      p.nms=nms;
-      // SOLD-TOO-EARLY near miss (even more painful dopamine)
+      // SOLD-TOO-EARLY near miss
       if(p.recentSold){
         for(const rs of p.recentSold){
           const now=p.prices[rs.id];

@@ -165,16 +165,8 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   p.prices = generatePrices(destinationId, ev);
   if (ev) p.eventLog = [...p.eventLog, { day: p.day, message: ev.message, type: ev.type }];
 
-  // Near misses
+  // Near misses — only for drugs you NO LONGER hold (sold too early)
   const nms: NearMiss[] = [];
-  for (const [id, q] of Object.entries(p.inventory)) {
-    if (q <= 0) continue;
-    const pr = p.previousPrices[id] as number;
-    const now = p.prices[id] as number;
-    if (pr && now && now > pr * 2.5) {
-      nms.push({ drug: DRUGS.find(x => x.id === id)!, previousPrice: pr, currentPrice: now, quantity: q, missedProfit: q * (now - pr) });
-    }
-  }
   // Sold-too-early near miss
   if (p.recentSold && p.recentSold.length > 0) {
     for (const rs of p.recentSold) {
