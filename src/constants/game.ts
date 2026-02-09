@@ -1,4 +1,4 @@
-import type { Drug, Location, Gang, Rank, MarketEvent, Milestone, PlayerState, Region, RegionLaw, Persona, PersonaModifiers, PersonaId } from '../types/game';
+import type { Drug, Location, Gang, Rank, MarketEvent, Milestone, PlayerState, Region, RegionLaw, Persona, PersonaModifiers, PersonaId, CampaignLevel } from '../types/game';
 
 // ── CONFIG ─────────────────────────────────────────────────
 export const DAYS = 30;
@@ -459,4 +459,89 @@ export function getPersonaModifiers(id: PersonaId | null): PersonaModifiers {
   if (!id) return DEFAULT_MODIFIERS;
   const persona = PERSONAS.find(p => p.id === id);
   return persona?.modifiers || DEFAULT_MODIFIERS;
+}
+
+// ── CAMPAIGN LEVEL CONFIGS ──────────────────────────────
+export const DAYS_PER_LEVEL = 30;
+
+export interface LevelConfig {
+  level: CampaignLevel;
+  name: string;
+  subtitle: string;
+  emoji: string;
+  adFrequency: number;
+  copBaseModifier: number;
+  customsModifier: number;
+  eventVolatility: number;
+  startingDebt: number;
+  debtSource: string;
+  rareSpawnMultiplier: number;
+  consignmentCapMultiplier: number;
+  gangLoanCapMultiplier: number;
+  territoryTributeMultiplier: number;
+  internationalRegions: string[];
+  gangConsignment: boolean;
+  gangLoans: boolean;
+  gangMissions: boolean;
+  territoryPurchase: boolean;
+  gangWars: boolean;
+  winCondition: {
+    minNetWorth: number;
+    debtFree: boolean;
+    minRep?: number;
+    minTerritories?: number;
+    bloodBrother?: boolean;
+    rankName?: string;
+    defeatedGangs?: number;
+  };
+}
+
+export const LEVEL_CONFIGS: Record<CampaignLevel, LevelConfig> = {
+  1: {
+    level: 1, name: 'Solo Dealer', subtitle: 'Survive the streets. Pay off the shark.', emoji: '🧢',
+    adFrequency: 3, copBaseModifier: 0, customsModifier: 0, eventVolatility: 1.0,
+    startingDebt: STARTING_DEBT, debtSource: 'shark',
+    rareSpawnMultiplier: 0.5,
+    consignmentCapMultiplier: 1, gangLoanCapMultiplier: 1, territoryTributeMultiplier: 1,
+    internationalRegions: [],
+    gangConsignment: false, gangLoans: false, gangMissions: false, territoryPurchase: false, gangWars: false,
+    winCondition: { minNetWorth: 25000, debtFree: true },
+  },
+  2: {
+    level: 2, name: 'Join a Gang', subtitle: 'Build connections. Go international.', emoji: '🤝',
+    adFrequency: 5, copBaseModifier: 0.03, customsModifier: 0, eventVolatility: 1.0,
+    startingDebt: 8000, debtSource: 'gang protection fee',
+    rareSpawnMultiplier: 1.0,
+    consignmentCapMultiplier: 1, gangLoanCapMultiplier: 1, territoryTributeMultiplier: 1,
+    internationalRegions: ['colombia', 'thailand'],
+    gangConsignment: true, gangLoans: true, gangMissions: true, territoryPurchase: true, gangWars: false,
+    winCondition: { minNetWorth: 75000, debtFree: false, bloodBrother: true, minTerritories: 2 },
+  },
+  3: {
+    level: 3, name: 'Gang Takeover', subtitle: 'Dominate the empire. Crush the competition.', emoji: '👑',
+    adFrequency: 7, copBaseModifier: 0.05, customsModifier: 0.05, eventVolatility: 1.2,
+    startingDebt: 0, debtSource: '',
+    rareSpawnMultiplier: 1.0,
+    consignmentCapMultiplier: 1.5, gangLoanCapMultiplier: 1.5, territoryTributeMultiplier: 1.5,
+    internationalRegions: ['colombia', 'thailand', 'netherlands', 'france'],
+    gangConsignment: true, gangLoans: true, gangMissions: true, territoryPurchase: true, gangWars: true,
+    winCondition: { minNetWorth: 0, debtFree: false, minRep: 250, minTerritories: 5, defeatedGangs: 2 },
+  },
+};
+
+export function getLevelConfig(level: CampaignLevel): LevelConfig {
+  return LEVEL_CONFIGS[level];
+}
+
+export type CampaignFeature = 'gangConsignment' | 'gangLoans' | 'gangMissions' | 'territoryPurchase' | 'gangWars';
+
+export function isFeatureEnabled(level: CampaignLevel, feature: CampaignFeature, mode: 'campaign' | 'classic'): boolean {
+  if (mode === 'classic') return true;
+  return LEVEL_CONFIGS[level][feature];
+}
+
+export function isRegionAvailable(level: CampaignLevel, regionId: string, mode: 'campaign' | 'classic'): boolean {
+  if (mode === 'classic') return true;
+  if (regionId === 'nyc') return true;
+  return LEVEL_CONFIGS[level].internationalRegions.includes(regionId);
 }

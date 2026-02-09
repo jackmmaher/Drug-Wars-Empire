@@ -6,6 +6,8 @@ import { CopScreen } from '../src/components/CopScreen';
 import { TradeModal } from '../src/components/TradeModal';
 import { EndScreen } from '../src/components/EndScreen';
 import { AdInterstitial } from '../src/components/AdInterstitial';
+import { LevelIntroScreen } from '../src/components/LevelIntroScreen';
+import { LevelCompleteScreen } from '../src/components/LevelCompleteScreen';
 
 export default function GameRouter() {
   const phase = useGameStore(s => s.phase);
@@ -13,7 +15,7 @@ export default function GameRouter() {
   const showingAd = useGameStore(s => s.showingAd);
   const dismissAd = useGameStore(s => s.dismissAd);
 
-  // Travel interstitial ad (every 5th travel)
+  // Travel interstitial ad (every Nth travel, frequency varies by level)
   if (showingAd) {
     return <AdInterstitial onClose={dismissAd} />;
   }
@@ -26,6 +28,10 @@ export default function GameRouter() {
   switch (phase) {
     case 'title':
       return <TitleScreen />;
+    case 'levelIntro':
+      return <LevelIntroScreen />;
+    case 'levelComplete':
+      return <LevelCompleteScreen />;
     case 'playing':
       return <GameScreen />;
     case 'cop':

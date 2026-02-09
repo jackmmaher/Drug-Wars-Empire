@@ -14,6 +14,7 @@ export function CopScreen() {
   const cops = cp.cops!;
   const isBountyHunter = !!cops.bountyHunter;
   const isGangCollector = !!cops.gangCollector;
+  const isGangWarBattle = !!cops.gangWarBattle;
   const law = cops.regionLaw || DEFAULT_LAW;
   const bribeCost = cops.bribeCost * cops.count;
   const used = inventoryCount(cp.inventory);
@@ -23,6 +24,64 @@ export function CopScreen() {
     borderRadius: 8, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center' as const,
     minHeight: 48,
   };
+
+  // Gang War Battle
+  if (isGangWarBattle) {
+    const battle = cops.gangWarBattle!;
+    const gang = GANGS.find(g => g.id === battle.gangId);
+    const gangName = gang?.name || 'Enemy gang';
+    const fightChance = cp.gun ? 35 : 15;
+    const negotiateCost = cops.bribeCost;
+
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={{ alignItems: 'center', paddingHorizontal: 24, maxWidth: 500 }}>
+          <Text style={{ fontSize: 56 }}>{gang?.emoji || '⚔️'}</Text>
+          <Text style={{ fontSize: 28, fontWeight: '900', color: colors.red, marginVertical: 10 }}>
+            GANG WAR!
+          </Text>
+          <Text style={{ color: colors.redLight, fontSize: 16, marginBottom: 4 }}>
+            {gangName} fighters {battle.type === 'ambush' ? 'ambushed you!' : 'defending their turf!'}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 14, fontStyle: 'italic', marginBottom: 4 }}>
+            Enemy strength: {battle.enemyStrength}%
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 15, marginBottom: 20 }}>
+            Cash: {$(cp.cash)} {'\u2022'} HP: {cp.hp}
+          </Text>
+
+          <View style={{ width: 320, gap: 10 }}>
+            <TouchableOpacity style={[actionBtn, { backgroundColor: colors.red }]} onPress={() => copAct('fight')} activeOpacity={0.8}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                {cp.gun ? 'FIGHT (armed)' : 'FIGHT (fists)'} <Text style={{ opacity: 0.7 }}>{fightChance}% win</Text>
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[actionBtn, { backgroundColor: colors.blue }]} onPress={() => copAct('run')} activeOpacity={0.8}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                RETREAT <Text style={{ opacity: 0.7 }}>40%</Text>
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                actionBtn, { backgroundColor: colors.yellow },
+                cp.cash < negotiateCost && { backgroundColor: colors.cardBorder, opacity: 0.4 },
+              ]}
+              onPress={() => copAct('bribe')}
+              activeOpacity={0.8}
+              disabled={cp.cash < negotiateCost}
+            >
+              <Text style={[
+                { color: '#fff', fontSize: 16, fontWeight: '700' },
+                cp.cash < negotiateCost && { color: colors.textDarkest },
+              ]}>
+                NEGOTIATE <Text style={{ opacity: 0.7 }}>~{$(negotiateCost)} ceasefire</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   if (isBountyHunter) {
     const con = cp.consignment!;

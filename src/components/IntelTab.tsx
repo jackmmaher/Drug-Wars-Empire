@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier } from '../constants/game';
+import { $, GANGS, MILESTONES, LOCATIONS, DRUGS, CONSIGNMENT_TURNS, FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD, getGangFavorTier, isFeatureEnabled } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
 
@@ -24,9 +24,16 @@ function getFavorPerks(tier: number): string[] {
 export function IntelTab() {
   const { colors } = useTheme();
   const cp = useGameStore(s => s.player);
+  const gameMode = useGameStore(s => s.gameMode);
+  const campaign = useGameStore(s => s.campaign);
   const payRatAction = useGameStore(s => s.payRat);
   const payConsignmentAction = useGameStore(s => s.payConsignment);
   const payGangLoanAction = useGameStore(s => s.payGangLoan);
+  const declareWar = useGameStore(s => s.declareWar);
+
+  const gangWarsEnabled = isFeatureEnabled(cp.campaignLevel, 'gangWars', gameMode);
+  const consignmentEnabled = isFeatureEnabled(cp.campaignLevel, 'gangConsignment', gameMode);
+  const territoryEnabled = isFeatureEnabled(cp.campaignLevel, 'territoryPurchase', gameMode);
 
   const pendingTip = cp.rat.pendingTip;
   const tipDrug = pendingTip ? DRUGS.find(d => d.id === pendingTip.drugId) : null;
@@ -315,6 +322,64 @@ export function IntelTab() {
         );
       })}
 
+      {/* Gang Wars (L3 Campaign only) */}
+      {gangWarsEnabled && (
+        <>
+          <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>GANG WARS</Text>
+          {campaign.gangWar.activeWar ? (() => {
+            const war = campaign.gangWar.activeWar!;
+            const warGang = GANGS.find(g => g.id === war.targetGangId);
+            return (
+              <View style={{
+                backgroundColor: 'rgba(239,68,68,0.06)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.15)',
+                borderRadius: 8, padding: 10,
+              }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.red, marginBottom: 4 }}>
+                  At war with {warGang?.emoji} {warGang?.name}
+                </Text>
+                <Bar label="ENEMY STRENGTH" percent={war.gangStrength} color={colors.red} />
+                <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 4 }}>
+                  Battles: {war.battlesWon}W / {war.battlesLost}L
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.textDim, marginTop: 2 }}>
+                  40% encounter on enemy turf, 15% elsewhere
+                </Text>
+              </View>
+            );
+          })() : (
+            <View>
+              {campaign.gangWar.defeatedGangs.length > 0 && (
+                <Text style={{ fontSize: 13, color: colors.green, marginBottom: 6 }}>
+                  Defeated: {campaign.gangWar.defeatedGangs.map(id => {
+                    const g = GANGS.find(x => x.id === id);
+                    return `${g?.emoji || ''} ${g?.name || id}`;
+                  }).join(', ')}
+                </Text>
+              )}
+              <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 6 }}>
+                Visit rival gang turf to declare war.
+              </Text>
+              {(() => {
+                const localGang = GANGS.find(g => g.turf.includes(cp.location));
+                if (!localGang || campaign.gangWar.defeatedGangs.includes(localGang.id)) return null;
+                // Don't show for gangs with high relations
+                if ((cp.gangRelations[localGang.id] ?? 0) > 10) return null;
+                return (
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#7f1d1d', borderRadius: 5, paddingVertical: 8, paddingHorizontal: 14, alignSelf: 'flex-start' }}
+                    onPress={() => declareWar(localGang.id)}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
+                      Declare War on {localGang.emoji} {localGang.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })()}
+            </View>
+          )}
+        </>
+      )}
+
       {/* Milestones */}
       <Text style={{ fontSize: 13, color: colors.textDim, letterSpacing: 2, marginTop: 10, marginBottom: 6, fontWeight: '600' }}>MILESTONES</Text>
       <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
@@ -345,6 +410,8 @@ export function IntelTab() {
                 : e.type === 'customs' ? colors.orangeLight
                 : e.type === 'gangLoan' ? '#fbbf24'
                 : e.type === 'mission' ? colors.indigoLight
+                : e.type === 'gangWar' ? colors.red
+                : e.type === 'levelUp' ? colors.yellow
                 : colors.textMuted,
               opacity: 1 - i * 0.06,
             },

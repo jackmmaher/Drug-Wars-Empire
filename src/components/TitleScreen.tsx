@@ -14,6 +14,8 @@ export function TitleScreen() {
   const setPlayerName = useGameStore(s => s.setPlayerName);
   const selectedPersona = useGameStore(s => s.selectedPersona);
   const setSelectedPersona = useGameStore(s => s.setSelectedPersona);
+  const gameMode = useGameStore(s => s.gameMode);
+  const setGameMode = useGameStore(s => s.setGameMode);
   const [difficulty, setDifficulty] = React.useState<'conservative' | 'standard' | 'highroller'>('standard');
   const canPlay = playerName.trim().length > 0;
 
@@ -36,10 +38,14 @@ export function TitleScreen() {
         <View style={{ width: 80, height: 1, backgroundColor: colors.red, marginVertical: 20, opacity: 0.5 }} />
 
         <Text style={{ color: colors.textMuted, fontSize: 16, lineHeight: 24, textAlign: 'center', marginBottom: 24 }}>
-          You owe{' '}
-          <Text style={{ color: colors.red, fontWeight: '700' }}>{$(STARTING_DEBT)}</Text> to the shark.{' '}
-          <Text style={{ color: colors.green, fontWeight: '700' }}>{$(STARTING_CASH)}</Text> in your pocket.
-          <Text style={{ color: colors.yellow, fontWeight: '700' }}> {DAYS} days</Text> to build an empire, go international, control territory, and survive.
+          {gameMode === 'campaign'
+            ? 'Rise from corner boy to kingpin. 3 levels. 90 days. Each level unlocks new mechanics. Fail = restart from Level 1.'
+            : <>You owe{' '}
+                <Text style={{ color: colors.red, fontWeight: '700' }}>{$(STARTING_DEBT)}</Text> to the shark.{' '}
+                <Text style={{ color: colors.green, fontWeight: '700' }}>{$(STARTING_CASH)}</Text> in your pocket.
+                <Text style={{ color: colors.yellow, fontWeight: '700' }}> {DAYS} days</Text> to build an empire, go international, control territory, and survive.
+              </>
+          }
         </Text>
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 24 }}>
@@ -65,6 +71,35 @@ export function TitleScreen() {
             fontSize: 18, color: colors.text, textAlign: 'center', marginBottom: 16, width: '100%', maxWidth: 320,
           }}
         />
+
+        {/* Campaign/Classic Mode Toggle */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, width: '100%', maxWidth: 320 }}>
+          {([
+            { id: 'campaign' as const, emoji: '🏴', label: 'Campaign', desc: '3 levels, 90 days' },
+            { id: 'classic' as const, emoji: '⚔️', label: 'Classic', desc: '30 days, all features' },
+          ]).map(m => (
+            <TouchableOpacity
+              key={m.id}
+              onPress={() => setGameMode(m.id)}
+              style={{
+                flex: 1,
+                backgroundColor: gameMode === m.id ? 'rgba(239,68,68,0.12)' : colors.bgCard,
+                borderWidth: 1.5,
+                borderColor: gameMode === m.id ? colors.red : colors.borderLight,
+                borderRadius: 8,
+                paddingVertical: 10,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
+              <Text style={{
+                fontSize: 14, fontWeight: '700', marginTop: 2,
+                color: gameMode === m.id ? colors.red : colors.textDim,
+              }}>{m.label}</Text>
+              <Text style={{ fontSize: 11, color: colors.textMuted }}>{m.desc}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* Persona Selector */}
         <Text style={{ fontSize: 11, letterSpacing: 3, color: colors.textMuted, textTransform: 'uppercase', marginBottom: 8 }}>

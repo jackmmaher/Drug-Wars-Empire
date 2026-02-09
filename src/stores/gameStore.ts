@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PlayerState, GamePhase, TabId, TradeInfo, PersonaId } from '../types/game';
+import type { PlayerState, GamePhase, TabId, TradeInfo, PersonaId, CampaignState, CampaignLevel } from '../types/game';
 import {
   createPlayerState, travel as travelLogic, executeTrade, copAction,
   handleOffer, bankAction, payShark, borrowShark, payRat as payRatLogic,
@@ -7,9 +7,12 @@ import {
   borrowFromGang as borrowFromGangLogic, payGangLoan as payGangLoanLogic,
   stashDrug as stashDrugLogic, retrieveDrug as retrieveDrugLogic,
   inventoryCount, netWorth, checkMilestones, effectiveSpace,
+  createDefaultCampaignState, createLevelTransitionState, checkLevelWinCondition,
+  declareGangWar as declareGangWarLogic, gangWarBattleAction as gangWarBattleLogic,
+  checkGangWarEncounter, checkTerritoryRaid, resolveTerritoryRaid,
   type SideEffect,
 } from '../lib/game-logic';
-import { getRank, DAYS, DRUGS, LOCATIONS } from '../constants/game';
+import { getRank, DAYS, DRUGS, LOCATIONS, GANGS, DAYS_PER_LEVEL, getLevelConfig, R } from '../constants/game';
 import { processSideEffects } from '../lib/audio';
 
 interface Notification {
@@ -24,6 +27,10 @@ interface GameStore {
   player: PlayerState;
   playerName: string;
   selectedPersona: PersonaId | null;
+
+  // Campaign state
+  campaign: CampaignState;
+  gameMode: 'campaign' | 'classic';
 
   // UI state
   activeTab: TabId;
@@ -47,7 +54,10 @@ interface GameStore {
 
   // Actions
   setSelectedPersona: (persona: PersonaId | null) => void;
+  setGameMode: (mode: 'campaign' | 'classic') => void;
   startGame: (difficulty?: 'conservative' | 'standard' | 'highroller') => void;
+  startCampaign: (difficulty?: 'conservative' | 'standard' | 'highroller') => void;
+  advanceLevel: () => void;
   travel: (locationId: string) => void;
   openTrade: (drugId: string, type: 'buy' | 'sell') => void;
   setTradeQuantity: (qty: string) => void;
@@ -65,6 +75,8 @@ interface GameStore {
   stashDrug: (drugId: string, qty: number) => void;
   retrieveDrug: (drugId: string, qty: number) => void;
   payRat: () => void;
+  declareWar: (gangId: string) => void;
+  resolveWarBattle: (action: 'fight' | 'retreat' | 'negotiate') => void;
   setTab: (tab: TabId) => void;
   setSubPanel: (panel: string | null) => void;
   setPlayerName: (name: string) => void;
@@ -83,6 +95,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   player: createPlayerState(),
   playerName: '',
   selectedPersona: null,
+
+  // Campaign
+  campaign: createDefaultCampaignState(),
+  gameMode: 'classic',
 
   activeTab: 'market',
   activeTrade: null,
@@ -106,20 +122,70 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Actions
   setSelectedPersona: (persona) => set({ selectedPersona: persona }),
+  setGameMode: (mode) => set({ gameMode: mode }),
 
   startGame: (difficulty = 'standard') => {
-    const persona = get().selectedPersona;
+    const s = get();
+    const persona = s.selectedPersona;
+    if (s.gameMode === 'campaign') {
+      return s.startCampaign(difficulty);
+    }
     set({
       phase: 'playing',
-      player: createPlayerState('bronx', difficulty, persona),
+      player: createPlayerState('bronx', difficulty, persona, 1, 'classic'),
+      campaign: createDefaultCampaignState('classic'),
       activeTab: 'market',
       subPanel: null,
     });
   },
 
+  startCampaign: (difficulty = 'standard') => {
+    const persona = get().selectedPersona;
+    const campaign = createDefaultCampaignState('campaign');
+    set({
+      phase: 'levelIntro',
+      player: createPlayerState('bronx', difficulty, persona, 1, 'campaign'),
+      campaign,
+      gameMode: 'campaign',
+      activeTab: 'market',
+      subPanel: null,
+    });
+  },
+
+  advanceLevel: () => {
+    const s = get();
+    const nextLevel = (s.campaign.level + 1) as CampaignLevel;
+    if (nextLevel > 3) return;
+
+    const newPlayer = createLevelTransitionState(s.player, nextLevel);
+    const nw = netWorth(s.player);
+    const newCampaign: CampaignState = {
+      ...s.campaign,
+      level: nextLevel,
+      campaignStats: {
+        ...s.campaign.campaignStats,
+        totalDaysPlayed: s.campaign.campaignStats.totalDaysPlayed + Math.min(s.player.day - 1, DAYS_PER_LEVEL),
+        totalProfit: s.campaign.campaignStats.totalProfit + s.player.profit,
+        levelsCompleted: s.campaign.campaignStats.levelsCompleted + 1,
+        levelScores: [...s.campaign.campaignStats.levelScores, {
+          level: s.campaign.level,
+          netWorth: nw,
+          rep: s.player.rep,
+          territories: Object.keys(s.player.territories).length,
+        }],
+      },
+    };
+
+    set({
+      phase: 'levelIntro',
+      player: newPlayer,
+      campaign: newCampaign,
+    });
+  },
+
   travel: (locationId) => {
     const s = get();
-    const result = travelLogic(s.player, locationId);
+    const result = travelLogic(s.player, locationId, s.campaign);
 
     // Process side effects
     processEffects(result.effects, set);
@@ -131,12 +197,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (result.notifications.length > 0 && result.player === s.player) return;
 
+    // Campaign L3: gang war encounter + territory raid checks
+    let finalPlayer = result.player;
+    let finalPhase = result.phase;
+    let updatedCampaign = s.campaign;
+
+    if (s.gameMode === 'campaign' && s.campaign.level === 3 && finalPhase === 'playing') {
+      // Territory raid check
+      const raid = checkTerritoryRaid(finalPlayer, updatedCampaign);
+      if (raid) {
+        const atLocation = finalPlayer.location === raid.locationId;
+        const raidResult = resolveTerritoryRaid(finalPlayer, raid, atLocation);
+        finalPlayer = raidResult.player;
+        processEffects(raidResult.effects, set);
+        for (const e of raidResult.effects) {
+          if (e.type === 'shake') get().notify('Territory raided!', 'danger');
+        }
+      }
+
+      // Gang war encounter check
+      if (checkGangWarEncounter(finalPlayer, updatedCampaign) && finalPhase === 'playing') {
+        const war = updatedCampaign.gangWar.activeWar!;
+        const gang = GANGS.find(g => g.id === war.targetGangId);
+        const onTurf = gang?.turf.includes(finalPlayer.location);
+        const regionLaw = LOCATIONS.find(l => l.id === finalPlayer.location);
+        finalPlayer = {
+          ...finalPlayer,
+          cops: {
+            count: 1,
+            bribeCost: R(2000, 5000),
+            regionLaw: finalPlayer.cops?.regionLaw || { forceName: 'Gang Fighters', forceEmoji: gang?.emoji || '⚔️', bribeMultiplier: 1, aggressionBase: 0, heatDecayBonus: 0, encounterModifier: 0, behavior: 'brutal' },
+            gangWarBattle: {
+              type: onTurf ? 'turf_fight' : 'ambush',
+              gangId: war.targetGangId,
+              enemyStrength: war.gangStrength,
+            },
+          },
+        };
+        finalPhase = 'cop';
+      }
+    }
+
     // Increment travel counter for ad interstitial timing
     const newTravelCount = s.travelCount + 1;
-    const shouldShowAd = newTravelCount > 0 && newTravelCount % 5 === 0
-      && result.phase === 'playing'; // No ads before cop encounters or game end
+    const adFreq = s.gameMode === 'campaign' ? getLevelConfig(s.campaign.level).adFrequency : 5;
+    const shouldShowAd = newTravelCount > 0 && newTravelCount % adFreq === 0
+      && finalPhase === 'playing'; // No ads before cop encounters or game end
 
-    set({ player: result.player, phase: result.phase, travelCount: newTravelCount, showingAd: shouldShowAd });
+    set({ player: finalPlayer, phase: finalPhase, campaign: updatedCampaign, travelCount: newTravelCount, showingAd: shouldShowAd });
   },
 
   openTrade: (drugId, type) => {
@@ -169,7 +277,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   closeTrade: () => set({ activeTrade: null, tradeQuantity: '' }),
 
   copAct: (action) => {
-    const result = copAction(get().player, action);
+    const s = get();
+    // Delegate gang war battles to resolveWarBattle
+    if (s.player.cops?.gangWarBattle) {
+      const warAction = action === 'bribe' ? 'negotiate' : action === 'run' ? 'retreat' : 'fight';
+      s.resolveWarBattle(warAction as 'fight' | 'retreat' | 'negotiate');
+      return;
+    }
+    const result = copAction(s.player, action);
     processEffects(result.effects, set);
     set({ player: result.player, phase: result.phase });
   },
@@ -244,6 +359,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
+  declareWar: (gangId) => {
+    const s = get();
+    const result = declareGangWarLogic(s.player, s.campaign, gangId);
+    processEffects(result.effects, set);
+    set({ player: result.player, campaign: result.campaign });
+  },
+
+  resolveWarBattle: (action) => {
+    const s = get();
+    const result = gangWarBattleLogic(s.player, s.campaign, action);
+    processEffects(result.effects, set);
+    set({ player: result.player, campaign: result.campaign, phase: result.phase });
+  },
+
   setTab: (tab) => set({ activeTab: tab, subPanel: null }),
   setSubPanel: (panel) => set(s => ({ subPanel: s.subPanel === panel ? null : panel })),
 
@@ -257,6 +386,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(s => ({
       phase: 'title',
       player: createPlayerState(),
+      campaign: createDefaultCampaignState(),
+      gameMode: s.gameMode,
       activeTab: 'market',
       activeTrade: null,
       tradeQuantity: '',

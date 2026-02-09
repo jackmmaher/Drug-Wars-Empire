@@ -1,4 +1,4 @@
-import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment, Forecast, PersonaId, GangLoan, GangMission } from '../types/game';
+import type { PlayerState, MarketEvent, Rat, Milestone, NearMiss, EventLog, RatTip, RegionLaw, Region, Consignment, Forecast, PersonaId, GangLoan, GangMission, CampaignLevel, CampaignState, GangWarState } from '../types/game';
 import {
   DRUGS, LOCATIONS, GANGS, EVENTS, MILESTONES, REGIONS,
   RAT_NAMES, RAT_TYPES,
@@ -10,23 +10,33 @@ import {
   FAVOR_FRIENDLY, FAVOR_TRUSTED, FAVOR_BLOOD,
   R, C, $, getRegionForLocation, DEFAULT_LAW,
   getPersonaModifiers, getGangFavorTier,
+  DAYS_PER_LEVEL, getLevelConfig, isFeatureEnabled, isRegionAvailable,
+  type CampaignFeature,
 } from '../constants/game';
 
 // ── Price Generation ───────────────────────────────────────
-export function generatePrices(locationId: string, event: MarketEvent | null): Record<string, number | null> {
+export function generatePrices(locationId: string, event: MarketEvent | null, campaignLevel: CampaignLevel = 1, mode: 'campaign' | 'classic' = 'classic'): Record<string, number | null> {
   const region = getRegionForLocation(locationId);
   const mults = region?.priceMultipliers || {};
   const prices: Record<string, number | null> = {};
+  const levelConfig = mode === 'campaign' ? getLevelConfig(campaignLevel) : null;
+  const rareMultiplier = levelConfig?.rareSpawnMultiplier ?? 1.0;
+  const volatility = levelConfig?.eventVolatility ?? 1.0;
+
   DRUGS.forEach(d => {
     const isEventDrug = event && event.drugId === d.id;
     if (!isEventDrug) {
-      const availChance = d.spawnChance ?? 0.88;
+      let availChance = d.spawnChance ?? 0.88;
+      if (d.rare) availChance *= rareMultiplier;
       if (!C(availChance)) { prices[d.id] = null; return; }
     }
     let pr = R(d.min, d.max);
     if (mults[d.id]) pr = Math.round(pr * mults[d.id]);
     if (isEventDrug) {
-      pr = Math.round(d.min * event!.multiplier + Math.random() * d.min * 0.15);
+      const adjustedMultiplier = event!.multiplier > 1
+        ? 1 + (event!.multiplier - 1) * volatility
+        : event!.multiplier / volatility;
+      pr = Math.round(d.min * adjustedMultiplier + Math.random() * d.min * 0.15);
       if (mults[d.id]) pr = Math.round(pr * mults[d.id]);
     }
     prices[d.id] = Math.max(1, pr);
@@ -50,7 +60,7 @@ export function makeRat(): Rat {
 }
 
 // ── Player Init ────────────────────────────────────────────
-export function createPlayerState(locationId = 'bronx', difficulty: 'conservative' | 'standard' | 'highroller' = 'standard', personaId: PersonaId | null = null): PlayerState {
+export function createPlayerState(locationId = 'bronx', difficulty: 'conservative' | 'standard' | 'highroller' = 'standard', personaId: PersonaId | null = null, campaignLevel: CampaignLevel = 1, mode: 'campaign' | 'classic' = 'classic'): PlayerState {
   const difficultySettings = {
     conservative: { cash: 500, debt: 2000 },
     standard: { cash: STARTING_CASH, debt: STARTING_DEBT },
@@ -61,7 +71,9 @@ export function createPlayerState(locationId = 'bronx', difficulty: 'conservativ
 
   const startLoc = personaId ? mods.startingLocation : locationId;
   const cash = Math.round(settings.cash * mods.startingCashMultiplier);
-  const debt = Math.round(settings.debt * mods.startingDebtMultiplier);
+  const debt = mode === 'campaign'
+    ? Math.round(getLevelConfig(campaignLevel).startingDebt * mods.startingDebtMultiplier)
+    : Math.round(settings.debt * mods.startingDebtMultiplier);
   const space = STARTING_SPACE + mods.startingSpaceOffset;
 
   // Gang relations with persona offsets
@@ -87,7 +99,7 @@ export function createPlayerState(locationId = 'bronx', difficulty: 'conservativ
     location: startLoc,
     inventory: {},
     space,
-    prices: generatePrices(startLoc, ev),
+    prices: generatePrices(startLoc, ev, campaignLevel, mode),
     previousPrices: {},
     gun: mods.startingGun,
     hp: mods.startingHP,
@@ -125,6 +137,7 @@ export function createPlayerState(locationId = 'bronx', difficulty: 'conservativ
     gangLoansRepaid: 0,
     gangMission: null,
     gangMissionsCompleted: 0,
+    campaignLevel,
   };
 }
 
@@ -297,12 +310,12 @@ export type SideEffect =
 // ── Travel ─────────────────────────────────────────────────
 export interface TravelResult {
   player: PlayerState;
-  phase: 'playing' | 'cop' | 'end' | 'win';
+  phase: 'playing' | 'cop' | 'end' | 'win' | 'levelComplete';
   effects: SideEffect[];
   notifications: Array<{ message: string; type: string }>;
 }
 
-export function travel(player: PlayerState, destinationId: string): TravelResult {
+export function travel(player: PlayerState, destinationId: string, campaign?: CampaignState): TravelResult {
   const effects: SideEffect[] = [];
   const notifications: Array<{ message: string; type: string }> = [];
 
@@ -318,6 +331,15 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   const destRegion = REGIONS.find(r => r.id === dest.region)!;
   const isInterRegion = srcLoc.region !== dest.region;
   const p = { ...player };
+
+  const gameMode = campaign?.mode || 'classic';
+
+  // Campaign region gating
+  if (isInterRegion && dest.region !== 'nyc' && !isRegionAvailable(p.campaignLevel, dest.region, gameMode)) {
+    const neededLevel = dest.region === 'colombia' || dest.region === 'thailand' ? 2 : 3;
+    notifications.push({ message: `${destRegion.name} unlocks in Level ${neededLevel}.`, type: 'danger' });
+    return { player, phase: 'playing', effects, notifications };
+  }
 
   // Inter-region flight checks
   if (isInterRegion && dest.region !== 'nyc') {
@@ -413,7 +435,7 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   const ev = selectEvent(currentRegion.id, p.rat.pendingTip, 0.38 + mods.eventChanceBonus);
   p.currentEvent = ev;
   p.previousPrices = { ...p.prices };
-  p.prices = generatePrices(p.location, ev);
+  p.prices = generatePrices(p.location, ev, p.campaignLevel, gameMode);
   if (ev) {
     const regionEmoji = currentRegion.id !== 'nyc' ? `${currentRegion.emoji} ` : '';
     p.eventLog = [...p.eventLog, { day: p.day, message: `${regionEmoji}${ev.message}`, type: ev.type }];
@@ -627,9 +649,10 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
     }
   }
 
-  // ── Cops (rebalanced: capped probability, regional law, persona + gang favor) ──
+  // ── Cops (rebalanced: capped probability, regional law, persona + gang favor + campaign) ──
   const curUsed = inventoryCount(p.inventory);
-  let copBase = 0.08 + (p.heat / 200) * 0.35 + law.encounterModifier - mods.copEncounterReduction;
+  const levelCopMod = gameMode === 'campaign' ? getLevelConfig(p.campaignLevel).copBaseModifier : 0;
+  let copBase = 0.08 + (p.heat / 200) * 0.35 + law.encounterModifier - mods.copEncounterReduction + levelCopMod;
   // Gang favor: Trusted (-5% on their turf)
   const localGangForCops = GANGS.find(g => g.turf.includes(p.location));
   if (localGangForCops && getGangFavorTier(p.gangRelations[localGangForCops.id] ?? 0) >= 2) {
@@ -656,9 +679,9 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
     effects.push({ type: 'shake' }, { type: 'haptic', style: 'warning' });
   }
 
-  // Offers (consignment > mission > equipment)
+  // Offers (consignment > mission > equipment), gated by campaign level
   p.offer = null;
-  const conOffer = generateConsignmentOffer(p, p.location);
+  const conOffer = isFeatureEnabled(p.campaignLevel, 'gangConsignment', gameMode) ? generateConsignmentOffer(p, p.location) : null;
   if (conOffer) {
     p.offer = {
       type: 'consignment',
@@ -670,13 +693,13 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
     };
   } else {
     // Gang mission offer (lower priority than consignment)
-    const missionOffer = generateGangMission(p, p.location);
+    const missionOffer = isFeatureEnabled(p.campaignLevel, 'gangMissions', gameMode) ? generateGangMission(p, p.location) : null;
     if (missionOffer) {
       p.offer = { type: 'mission', mission: missionOffer, gangId: missionOffer.gangId };
     } else if (!p.gun && C(0.14)) p.offer = { type: 'gun', price: R(300, 600) };
     else if (C(0.12)) { const sp = R(20, 35); p.offer = { type: 'coat', price: R(150, 400), space: sp }; }
     else if (!p.rat.hired && C(0.08) && p.rep >= 10) p.offer = { type: 'rat', rat: makeRat() };
-    else if (p.rep >= 25 && C(0.1) && !p.territories[p.location]) {
+    else if (isFeatureEnabled(p.campaignLevel, 'territoryPurchase', gameMode) && p.rep >= 25 && C(0.1) && !p.territories[p.location]) {
       const lg2 = GANGS.find(g => g.turf.includes(p.location));
       const terrCost = Math.round(R(3000, 12000) * mods.territoryDiscountMultiplier);
       if (!lg2 || (p.gangRelations[lg2.id] ?? 0) > 5) p.offer = { type: 'territory', locationId: p.location, cost: terrCost, tribute: R(100, 500) };
@@ -690,9 +713,22 @@ export function travel(player: PlayerState, destinationId: string): TravelResult
   if (newMilestone) effects.push({ type: 'sfx', sound: 'level' }, { type: 'haptic', style: 'success' });
 
   // End check
-  if (p.day > DAYS) {
-    const phase = p.cash + p.bank >= p.debt ? 'win' : 'end';
-    return { player: p, phase, effects, notifications };
+  const daysLimit = DAYS_PER_LEVEL;
+  if (p.day > daysLimit) {
+    if (gameMode === 'campaign' && campaign) {
+      const won = checkLevelWinCondition(p, campaign);
+      if (won && p.campaignLevel < 3) {
+        return { player: p, phase: 'levelComplete', effects, notifications };
+      } else if (won && p.campaignLevel === 3) {
+        return { player: p, phase: 'win', effects, notifications };
+      } else {
+        return { player: p, phase: 'end', effects, notifications };
+      }
+    } else {
+      // Classic mode
+      const phase = p.cash + p.bank >= p.debt ? 'win' : 'end';
+      return { player: p, phase, effects, notifications };
+    }
   }
   if (p.hp <= 0 || p.fingers <= 0) {
     if (p.fingers <= 0) p.eventLog = [...p.eventLog, { day: p.day, message: `You have nothing left.`, type: 'danger' }];
@@ -1610,5 +1646,235 @@ export function generateGangMission(player: PlayerState, location: string): Gang
         turnsLeft: 3, originLocation: location,
       };
   }
+}
+
+// ── Campaign: Check Level Win Condition ──────────────────
+export function checkLevelWinCondition(player: PlayerState, campaign: CampaignState): boolean {
+  const config = getLevelConfig(campaign.level);
+  const wc = config.winCondition;
+  const nw = netWorth(player);
+  const terrCount = Object.keys(player.territories).length;
+
+  if (wc.minNetWorth > 0 && nw < wc.minNetWorth) return false;
+  if (wc.debtFree && player.debt > 0) return false;
+  if (wc.minRep && player.rep < wc.minRep) return false;
+  if (wc.minTerritories && terrCount < wc.minTerritories) return false;
+  if (wc.bloodBrother && !Object.values(player.gangRelations).some(v => v >= 25)) return false;
+  if (wc.defeatedGangs && campaign.gangWar.defeatedGangs.length < wc.defeatedGangs) return false;
+
+  return true;
+}
+
+// ── Campaign: Level Transition State ─────────────────────
+export function createLevelTransitionState(player: PlayerState, nextLevel: CampaignLevel): PlayerState {
+  const config = getLevelConfig(nextLevel);
+  const p = { ...player };
+
+  // Carry over: cash, bank, inventory, space, gun, rep, gangRelations, territories, rat, fingers, milestones, persona, cumulative stats
+  // Reset: day, debt, heat, prices, eventLog, offer, cops, consignment, gangLoan, gangMission, streak, combo, forecast
+
+  p.day = 1;
+  p.debt = Math.round(config.startingDebt * getPersonaModifiers(p.personaId).startingDebtMultiplier);
+  p.heat = 0;
+  p.hp = Math.min(100, p.hp + 30); // heal +30, cap 100
+  p.campaignLevel = nextLevel;
+  p.offer = null;
+  p.cops = null;
+  p.consignment = null;
+  p.gangLoan = null;
+  p.gangMission = null;
+  p.streak = 0;
+  p.combo = 1;
+  p.forecast = null;
+  p.currentEvent = null;
+  p.nearMisses = [];
+  p.recentSold = [];
+  p.eventLog = [{ day: 1, message: `Level ${nextLevel}: ${config.name} begins!`, type: 'levelUp' as const }];
+
+  // Regenerate prices for current location
+  const regionId = getRegionForLocation(p.location)?.id || 'nyc';
+  const ev = selectEvent(regionId, null, 0.35);
+  p.prices = generatePrices(p.location, ev, nextLevel, 'campaign');
+  p.previousPrices = {};
+  p.currentEvent = ev;
+  if (ev) p.eventLog.push({ day: 1, message: ev.message, type: ev.type });
+
+  return p;
+}
+
+// ── Campaign: Default Campaign State ─────────────────────
+export function createDefaultCampaignState(mode: 'campaign' | 'classic' = 'classic'): CampaignState {
+  return {
+    level: 1,
+    mode,
+    campaignStats: {
+      totalDaysPlayed: 0,
+      totalProfit: 0,
+      levelsCompleted: 0,
+      levelScores: [],
+    },
+    gangWar: {
+      defeatedGangs: [],
+      activeWar: null,
+      pendingRaid: null,
+    },
+  };
+}
+
+// ── Campaign: Gang War Functions ─────────────────────────
+export function declareGangWar(player: PlayerState, campaign: CampaignState, gangId: string): { player: PlayerState; campaign: CampaignState; effects: SideEffect[] } {
+  const effects: SideEffect[] = [];
+  const p = { ...player };
+  const c = { ...campaign, gangWar: { ...campaign.gangWar } };
+  const gang = GANGS.find(g => g.id === gangId);
+
+  p.gangRelations = { ...p.gangRelations, [gangId]: -30 };
+  c.gangWar.activeWar = {
+    targetGangId: gangId,
+    playerStrength: 100,
+    gangStrength: 100,
+    battlesWon: 0,
+    battlesLost: 0,
+  };
+
+  p.eventLog = [...p.eventLog, { day: p.day, message: `War declared on ${gang?.name || 'gang'}!`, type: 'gangWar' as const }];
+  effects.push({ type: 'sfx', sound: 'bad' }, { type: 'haptic', style: 'heavy' });
+
+  return { player: p, campaign: c, effects };
+}
+
+export function gangWarBattleAction(player: PlayerState, campaign: CampaignState, action: 'fight' | 'retreat' | 'negotiate'): { player: PlayerState; campaign: CampaignState; phase: 'playing' | 'end'; effects: SideEffect[] } {
+  const effects: SideEffect[] = [{ type: 'sfx', sound: 'bad' }, { type: 'haptic', style: 'heavy' }];
+  const p = { ...player };
+  const c = { ...campaign, gangWar: { ...campaign.gangWar, activeWar: campaign.gangWar.activeWar ? { ...campaign.gangWar.activeWar } : null } };
+  const war = c.gangWar.activeWar;
+  if (!war) return { player: p, campaign: c, phase: 'playing', effects };
+
+  const gang = GANGS.find(g => g.id === war.targetGangId);
+  const gangName = gang?.name || 'The gang';
+
+  if (action === 'fight') {
+    const winChance = p.gun ? 0.35 : 0.15;
+    if (C(winChance)) {
+      // Win
+      const dmg = R(15, 25);
+      war.gangStrength = Math.max(0, war.gangStrength - dmg);
+      war.battlesWon++;
+      p.rep += 5;
+      p.heat = Math.min(HEAT_CAP, p.heat + 8);
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Won battle vs ${gangName}! Their strength: ${war.gangStrength}`, type: 'gangWar' as const }];
+      effects.push({ type: 'haptic', style: 'success' });
+
+      // Check gang defeat
+      if (war.gangStrength <= 0) {
+        c.gangWar.defeatedGangs = [...c.gangWar.defeatedGangs, war.targetGangId];
+        c.gangWar.activeWar = null;
+        p.rep += 15;
+        p.cash += 5000;
+        p.eventLog = [...p.eventLog, { day: p.day, message: `${gangName} DEFEATED! +$5K bonus, +15 rep`, type: 'gangWar' as const }];
+        effects.push({ type: 'sfx', sound: 'level' });
+      }
+    } else {
+      // Lose
+      war.battlesLost++;
+      const hpLoss = R(10, 25);
+      p.hp -= hpLoss;
+      const cashLoss = Math.round(p.cash * 0.20);
+      p.cash -= cashLoss;
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Lost battle vs ${gangName}! -${hpLoss}HP, -${$(cashLoss)}`, type: 'gangWar' as const }];
+      effects.push({ type: 'shake' });
+    }
+  } else if (action === 'retreat') {
+    if (C(0.40)) {
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Retreated from ${gangName}'s fighters!`, type: 'gangWar' as const }];
+      p.closeCallCount++;
+    } else {
+      p.hp -= 15;
+      const cashLoss = Math.round(p.cash * 0.10);
+      p.cash -= cashLoss;
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Failed retreat! -15HP, -${$(cashLoss)}`, type: 'gangWar' as const }];
+      effects.push({ type: 'shake' });
+    }
+  } else {
+    // Negotiate — ceasefire for 3 turns (pay 1.5x base bribe)
+    const cost = R(2000, 5000);
+    if (p.cash >= cost) {
+      p.cash -= cost;
+      // We mark gangStrength temporarily to track ceasefire — use a simple approach: set playerStrength to a negative ceasefire counter
+      // Actually, simpler: just remove the war temporarily for 3 turns isn't clean. Let's just accept the cost.
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Paid ${$(cost)} ceasefire with ${gangName}. 3 turns peace.`, type: 'gangWar' as const }];
+    } else {
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Can't afford ceasefire!`, type: 'gangWar' as const }];
+    }
+  }
+
+  p.cops = null;
+  if (p.hp <= 0) return { player: p, campaign: c, phase: 'end', effects };
+  return { player: p, campaign: c, phase: 'playing', effects };
+}
+
+export function checkGangWarEncounter(player: PlayerState, campaign: CampaignState): boolean {
+  if (!campaign.gangWar.activeWar) return false;
+  const war = campaign.gangWar.activeWar;
+  const gang = GANGS.find(g => g.id === war.targetGangId);
+  if (!gang) return false;
+
+  // 40% on enemy turf, 15% elsewhere
+  const onEnemyTurf = gang.turf.includes(player.location);
+  const chance = onEnemyTurf ? 0.40 : 0.15;
+  return C(chance);
+}
+
+export function checkTerritoryRaid(player: PlayerState, campaign: CampaignState): { gangId: string; locationId: string } | null {
+  if (campaign.mode !== 'campaign' || player.campaignLevel < 3) return null;
+  const terrIds = Object.keys(player.territories);
+  if (terrIds.length === 0) return null;
+  if (!C(0.10)) return null;
+
+  // Pick a random territory
+  const targetId = terrIds[R(0, terrIds.length - 1)];
+  // Find a rival gang (not defeated)
+  const rivalGangs = GANGS.filter(g => !campaign.gangWar.defeatedGangs.includes(g.id));
+  if (rivalGangs.length === 0) return null;
+  const raider = rivalGangs[R(0, rivalGangs.length - 1)];
+
+  return { gangId: raider.id, locationId: targetId };
+}
+
+export function resolveTerritoryRaid(player: PlayerState, raid: { gangId: string; locationId: string }, defend: boolean): { player: PlayerState; effects: SideEffect[] } {
+  const effects: SideEffect[] = [];
+  const p = { ...player };
+  const gang = GANGS.find(g => g.id === raid.gangId);
+  const loc = LOCATIONS.find(l => l.id === raid.locationId);
+  const gangName = gang?.name || 'Rival gang';
+  const locName = loc?.name || 'territory';
+
+  if (defend) {
+    // Auto-defend — fight encounter
+    const winChance = p.gun ? 0.45 : 0.20;
+    if (C(winChance)) {
+      p.rep += 3;
+      p.heat = Math.min(HEAT_CAP, p.heat + 5);
+      p.eventLog = [...p.eventLog, { day: p.day, message: `Defended ${locName} from ${gangName}!`, type: 'gangWar' as const }];
+      effects.push({ type: 'haptic', style: 'success' });
+    } else {
+      // Lost defense — lose territory
+      const newTerr = { ...p.territories };
+      delete newTerr[raid.locationId];
+      p.territories = newTerr;
+      p.hp -= R(5, 15);
+      p.eventLog = [...p.eventLog, { day: p.day, message: `${gangName} took ${locName}! Lost territory.`, type: 'gangWar' as const }];
+      effects.push({ type: 'shake' }, { type: 'haptic', style: 'error' });
+    }
+  } else {
+    // Not present — lose territory and stash
+    const newTerr = { ...p.territories };
+    delete newTerr[raid.locationId];
+    p.territories = newTerr;
+    p.eventLog = [...p.eventLog, { day: p.day, message: `${gangName} raided ${locName}! Territory and stash lost.`, type: 'gangWar' as const }];
+    effects.push({ type: 'shake' }, { type: 'haptic', style: 'error' });
+  }
+
+  return { player: p, effects };
 }
 

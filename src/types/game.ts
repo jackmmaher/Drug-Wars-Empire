@@ -1,3 +1,38 @@
+// ── Campaign Types ──────────────────────────────────────
+export type CampaignLevel = 1 | 2 | 3;
+
+export interface GangWarState {
+  defeatedGangs: string[];
+  activeWar: {
+    targetGangId: string;
+    playerStrength: number;
+    gangStrength: number;
+    battlesWon: number;
+    battlesLost: number;
+  } | null;
+  pendingRaid: {
+    gangId: string;
+    locationId: string;
+  } | null;
+}
+
+export interface CampaignState {
+  level: CampaignLevel;
+  mode: 'campaign' | 'classic';
+  campaignStats: {
+    totalDaysPlayed: number;
+    totalProfit: number;
+    levelsCompleted: number;
+    levelScores: Array<{
+      level: CampaignLevel;
+      netWorth: number;
+      rep: number;
+      territories: number;
+    }>;
+  };
+  gangWar: GangWarState;
+}
+
 // ── Core Game Types ──────────────────────────────────────
 
 export interface Consignment {
@@ -114,6 +149,11 @@ export interface CopEncounter {
   consignment?: Consignment;
   gangCollector?: boolean;
   gangLoan?: GangLoan;
+  gangWarBattle?: {
+    type: 'ambush' | 'turf_fight' | 'raid';
+    gangId: string;
+    enemyStrength: number;
+  };
 }
 
 export interface Offer {
@@ -150,7 +190,7 @@ export interface NearMiss {
 export interface EventLog {
   day: number;
   message: string;
-  type: 'info' | 'danger' | 'spike' | 'crash' | 'tip' | 'customs' | 'consignment' | 'gangLoan' | 'mission';
+  type: 'info' | 'danger' | 'spike' | 'crash' | 'tip' | 'customs' | 'consignment' | 'gangLoan' | 'mission' | 'gangWar' | 'levelUp';
 }
 
 export interface Forecast {
@@ -277,9 +317,10 @@ export interface PlayerState {
   gangLoansRepaid: number;
   gangMission: GangMission | null;
   gangMissionsCompleted: number;
+  campaignLevel: CampaignLevel;
 }
 
-export type GamePhase = 'title' | 'playing' | 'cop' | 'win' | 'end';
+export type GamePhase = 'title' | 'playing' | 'cop' | 'win' | 'end' | 'levelComplete' | 'levelIntro';
 export type TabId = 'market' | 'map' | 'intel';
 export type Difficulty = 'conservative' | 'standard' | 'highroller';
 

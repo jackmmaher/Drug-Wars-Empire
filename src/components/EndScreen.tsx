@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, MILESTONES, DAYS, getRank, PERSONAS } from '../constants/game';
+import { $, MILESTONES, DAYS, getRank, PERSONAS, DAYS_PER_LEVEL, getLevelConfig } from '../constants/game';
 import { netWorth } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { submitScore, fetchLeaderboard, type ScoreEntry } from '../lib/leaderboard';
@@ -11,6 +11,8 @@ export function EndScreen() {
   const { colors } = useTheme();
   const phase = useGameStore(s => s.phase);
   const cp = useGameStore(s => s.player);
+  const campaign = useGameStore(s => s.campaign);
+  const gameMode = useGameStore(s => s.gameMode);
   const resetToTitle = useGameStore(s => s.resetToTitle);
   const playerName = useGameStore(s => s.playerName);
 
@@ -37,7 +39,7 @@ export function EndScreen() {
         trades: cp.trades,
         best_trade: cp.bestTrade,
         fingers: cp.fingers,
-        days_survived: Math.min(cp.day, DAYS),
+        days_survived: Math.min(cp.day, DAYS_PER_LEVEL),
         won: phase === 'win',
       });
       setSubmitted(true);
@@ -47,7 +49,14 @@ export function EndScreen() {
     run();
   }, []);
 
+  const isCampaign = gameMode === 'campaign';
+  const levelConfig = isCampaign ? getLevelConfig(campaign.level) : null;
+
   const stats = [
+    ...(isCampaign ? [
+      { label: 'Level', value: `${campaign.level} — ${levelConfig?.name}`, color: colors.yellow },
+      { label: 'Total Days', value: campaign.campaignStats.totalDaysPlayed + Math.min(cp.day - 1, DAYS_PER_LEVEL) },
+    ] : []),
     { label: 'Trades', value: cp.trades },
     { label: 'Best', value: $(cp.bestTrade), color: colors.green },
     { label: 'Streak', value: `${cp.maxStreak}x` },
@@ -56,8 +65,11 @@ export function EndScreen() {
     { label: 'Rep', value: cp.rep },
     { label: 'HP', value: `${cp.hp}%` },
     { label: 'Milestones', value: cp.milestones?.length || 0 },
-    { label: 'Days', value: Math.min(cp.day - 1, DAYS) },
+    { label: 'Days', value: Math.min(cp.day - 1, DAYS_PER_LEVEL) },
     { label: 'Persona', value: persona ? persona.name : 'Classic' },
+    ...(isCampaign && campaign.gangWar.defeatedGangs.length > 0 ? [
+      { label: 'Gangs Defeated', value: campaign.gangWar.defeatedGangs.length, color: colors.red },
+    ] : []),
   ];
 
   return (
@@ -65,8 +77,16 @@ export function EndScreen() {
       <ScrollView contentContainerStyle={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 24, paddingBottom: 40 }}>
         <Text style={{ fontSize: 64, marginBottom: 6 }}>{isWin ? fr.emoji : '\uD83D\uDC80'}</Text>
         <Text style={{ fontSize: 34, fontWeight: '900', marginBottom: 6, color: isWin ? colors.green : colors.red }}>
-          {isWin ? 'SURVIVED' : cp.hp <= 0 ? 'DEAD' : 'GAME OVER'}
+          {isWin
+            ? (isCampaign ? 'CAMPAIGN COMPLETE!' : 'SURVIVED')
+            : cp.hp <= 0 ? 'DEAD'
+            : (isCampaign ? `LEVEL ${campaign.level} FAILED` : 'GAME OVER')}
         </Text>
+        {isCampaign && !isWin && (
+          <Text style={{ fontSize: 14, color: colors.textMuted, marginBottom: 4 }}>
+            Campaign failure — restart from Level 1
+          </Text>
+        )}
 
         <Text style={{ fontSize: 17, color: colors.yellow, fontWeight: '800' }}>{fr.name}</Text>
         {persona && (

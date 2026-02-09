@@ -1,13 +1,15 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, GANGS, DRUGS, REGIONS, LOCATIONS, getRegionForLocation, getRegionLocations } from '../constants/game';
+import { $, GANGS, DRUGS, REGIONS, LOCATIONS, getRegionForLocation, getRegionLocations, isRegionAvailable } from '../constants/game';
 import { useGameStore } from '../stores/gameStore';
 import { inventoryCount } from '../lib/game-logic';
+import type { CampaignLevel } from '../types/game';
 
 export function MapTab() {
   const { colors } = useTheme();
   const cp = useGameStore(s => s.player);
+  const gameMode = useGameStore(s => s.gameMode);
   const travelAction = useGameStore(s => s.travel);
 
   const currentRegion = getRegionForLocation(cp.location);
@@ -75,9 +77,10 @@ export function MapTab() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {otherRegions.map(r => {
           const isNyc = r.id === 'nyc';
+          const regionAvailable = isRegionAvailable(cp.campaignLevel, r.id, gameMode);
           const flyCost = isNyc ? Math.round((currentRegion?.flyCost || 0) / 2) : r.flyCost;
           const repNeeded = isNyc ? 0 : r.rep;
-          const ok = cp.rep >= repNeeded;
+          const ok = regionAvailable && cp.rep >= repNeeded;
 
           const customsRisk = carryingUnits > 0 ? Math.round(
             Math.max(0.05, Math.min(0.75,
@@ -114,7 +117,8 @@ export function MapTab() {
                 { fontSize: 14, fontWeight: '600', color: colors.textDim },
                 !ok && { color: colors.textDarkest },
               ]}>{r.name}</Text>
-              {!ok && <Text style={{ fontSize: 12, color: colors.textDark }}>Locked {repNeeded} rep</Text>}
+              {!regionAvailable && <Text style={{ fontSize: 12, color: colors.textDark }}>Unlocks in Level {r.id === 'colombia' || r.id === 'thailand' ? 2 : 3}</Text>}
+              {regionAvailable && !ok && <Text style={{ fontSize: 12, color: colors.textDark }}>Locked {repNeeded} rep</Text>}
               {ok && <Text style={{ fontSize: 12, color: colors.textMuted }}>{$(flyCost)} {'\u2022'} {isNyc ? (currentRegion?.travelDays || 2) : r.travelDays}d</Text>}
               {ok && !isNyc && Object.keys(r.priceMultipliers).length > 0 && (
                 <Text style={{ fontSize: 11, color: colors.textDim }}>

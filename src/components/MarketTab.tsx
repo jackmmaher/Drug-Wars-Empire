@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, DRUGS, GANGS, LOCATIONS, STASH_CAPACITY } from '../constants/game';
+import { $, DRUGS, GANGS, LOCATIONS, STASH_CAPACITY, isFeatureEnabled } from '../constants/game';
 import { inventoryCount, getGangLoanCap } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 
@@ -27,8 +27,10 @@ export function MarketTab() {
   const territory = cp.territories[cp.location];
   const stash: Record<string, number> = territory?.stash || {};
   const stashCount = Object.values(stash).reduce((a, b) => a + b, 0);
+  const gameMode = useGameStore(s => s.gameMode);
   const localGang = GANGS.find(g => g.turf.includes(cp.location));
-  const canBorrowGang = localGang && !cp.gangLoan && (cp.gangRelations[localGang.id] ?? 0) >= 0;
+  const gangLoansEnabled = isFeatureEnabled(cp.campaignLevel, 'gangLoans', gameMode);
+  const canBorrowGang = gangLoansEnabled && localGang && !cp.gangLoan && (cp.gangRelations[localGang.id] ?? 0) >= 0;
   const gangLoanCap = localGang ? getGangLoanCap(cp, localGang.id) : 0;
 
   const smBtn = {

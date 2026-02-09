@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { $, DAYS, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, PERSONAS, getRank, getRegionForLocation, getRegion } from '../constants/game';
+import { $, DAYS, STARTING_DEBT, LOCATIONS, RANKS, REGIONS, DRUGS, GANGS, PERSONAS, getRank, getRegionForLocation, getRegion, DAYS_PER_LEVEL } from '../constants/game';
 import { inventoryCount, netWorth, effectiveSpace } from '../lib/game-logic';
 import { useGameStore } from '../stores/gameStore';
 import { Bar } from './Bar';
@@ -10,8 +10,11 @@ import { MiniStat } from './MiniStat';
 export function GameHeader() {
   const { colors, mode, toggleTheme } = useTheme();
   const cp = useGameStore(s => s.player);
+  const gameMode = useGameStore(s => s.gameMode);
+  const campaign = useGameStore(s => s.campaign);
   const subPanel = useGameStore(s => s.subPanel);
   const setSubPanel = useGameStore(s => s.setSubPanel);
+  const daysLimit = DAYS_PER_LEVEL;
 
   const rank = getRank(cp.rep);
   const nw = netWorth(cp);
@@ -33,7 +36,10 @@ export function GameHeader() {
       <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <View>
-            <Text style={{ fontSize: 13, color: colors.textDark, letterSpacing: 2, fontWeight: '600' }}>DAY {Math.min(cp.day, DAYS)}/{DAYS}</Text>
+            <Text style={{ fontSize: 13, color: colors.textDark, letterSpacing: 2, fontWeight: '600' }}>
+              {gameMode === 'campaign' && <Text style={{ color: colors.yellow, fontWeight: '800' }}>L{campaign.level} </Text>}
+              DAY {Math.min(cp.day, daysLimit)}/{daysLimit}
+            </Text>
             <Text style={{ fontSize: 28, fontWeight: '900', color: colors.white, lineHeight: 34 }}>{$(cp.cash)}</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
@@ -52,8 +58,8 @@ export function GameHeader() {
         {cp.debt > STARTING_DEBT * 3 && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
             <Text style={{ fontSize: 13, fontWeight: '700', color: colors.red }}>{'\u26A0'} Debt compounding!</Text>
-            {cp.day < DAYS && (
-              <Text style={{ fontSize: 13, color: colors.textMuted }}>{'\u2192'} ~{$(Math.round(cp.debt * Math.pow(1.1, DAYS - cp.day)))} by D{DAYS}</Text>
+            {cp.day < daysLimit && (
+              <Text style={{ fontSize: 13, color: colors.textMuted }}>{'\u2192'} ~{$(Math.round(cp.debt * Math.pow(1.1, daysLimit - cp.day)))} by D{daysLimit}</Text>
             )}
           </View>
         )}
@@ -76,8 +82,8 @@ export function GameHeader() {
         {/* Progress bar */}
         <View style={{ height: 4, backgroundColor: colors.trackBg, borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
           <View style={[
-            { height: '100%', width: `${Math.min(cp.day / DAYS * 100, 100)}%` },
-            cp.day > 25 ? { backgroundColor: colors.red } : { backgroundColor: colors.blue },
+            { height: '100%', width: `${Math.min(cp.day / daysLimit * 100, 100)}%` },
+            cp.day > daysLimit - 5 ? { backgroundColor: colors.red } : { backgroundColor: colors.blue },
           ]} />
         </View>
       </View>
